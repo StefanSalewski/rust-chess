@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 14-JAN-2023
+// v 0.2 -- 26-JAN-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -15,10 +15,10 @@
 // make aggression depending on winning/loosing
 // add optional random noise
 
-#![allow(dead_code)]
-//#![allow(non_camel_case_names)]
-#![allow(non_snake_case)]
-#![allow(non_upper_case_globals)]
+// #![allow(dead_code)]
+// #![allow(non_camel_case_names)]
+// #![allow(non_snake_case)]
+// #![allow(non_upper_case_globals)]
 
 use bit_set::BitSet;
 use core::ops::Range;
@@ -26,16 +26,16 @@ use std::cmp::{max, min};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn print_variable_type<K>(_: &K) {
     println!("{}", std::any::type_name::<K>())
 }
 
-#[allow(non_camel_case_types)]
+// #[allow(non_camel_case_types)]
 
-//#[derive(Default)]
+// #[derive(Default)]
+// #[derive(Debug)]
 pub struct Game {
     table_put: i64, // some fields like this are only for statistics and debugging
     table_col: i64,
@@ -64,6 +64,28 @@ pub struct Game {
     king_path: Path,
     pjm: i64,
 }
+
+const CORE_BIT_BUFFER_SIZE: usize = 24; // size with huffman compression
+const HASH_BIT_BUFFER_SIZE: usize = 32; // plus 8 bytes for hash when debugging
+const BIT_BUFFER_SIZE: usize = bit_buffer_size();
+
+const fn bit_buffer_size() -> usize {
+    #[cfg(not(feature = "salewskiChessDebug"))]
+    {
+        CORE_BIT_BUFFER_SIZE
+    }
+    #[cfg(feature = "salewskiChessDebug")]
+    {
+        HASH_BIT_BUFFER_SIZE
+    }
+}
+
+// this syntas is also possible
+const JUST_TEST: usize = if cfg!(feature = "salewskiChessDebug") {
+    2
+} else {
+    7
+};
 
 pub fn new_game() -> Game {
     // default options
@@ -107,23 +129,23 @@ pub fn new_game() -> Game {
         freedom: [[0; 64]; 13],
         pawn_path: [[[Gnu {
             pos: 0,
-            nxtDirIdx: 0,
+            nxt_dir_idx: 0,
         }; 64]; 64]; 2],
         knight_path: [[Gnu {
             pos: 0,
-            nxtDirIdx: 0,
+            nxt_dir_idx: 0,
         }; 64]; 64],
         bishop_path: [[Gnu {
             pos: 0,
-            nxtDirIdx: 0,
+            nxt_dir_idx: 0,
         }; 64]; 64],
         rook_path: [[Gnu {
             pos: 0,
-            nxtDirIdx: 0,
+            nxt_dir_idx: 0,
         }; 64]; 64],
         king_path: [[Gnu {
             pos: 0,
-            nxtDirIdx: 0,
+            nxt_dir_idx: 0,
         }; 64]; 64],
         pjm: -1,
     };
@@ -163,7 +185,7 @@ fn write_statistics(g: &Game) {
     println!("max_delta_len: {}", g.max_delta_len);
 }
 
-type BitBuffer192 = [u8; 24];
+type BitBuffer192 = [u8; bit_buffer_size()];
 
 const MAX_DEPTH: usize = 15; // other values should work as well
 
@@ -174,7 +196,6 @@ const BISHOP_ID: i64 = 3;
 const ROOK_ID: i64 = 4;
 const QUEEN_ID: i64 = 5;
 const KING_ID: i64 = 6;
-//const ARAX: i32 = 6; // fix for unavailable negative array indizes
 const ARRAY_BASE_6: i64 = 6;
 const W_PAWN: i64 = PAWN_ID;
 const W_KNIGHT: i64 = KNIGHT_ID;
@@ -200,15 +221,15 @@ const SO: i32 = S + O;
 const NW: i32 = N + W;
 const SW: i32 = S + W;
 
-const PawnDirsWhite: [i32; 4] = [
+const PAWN_DIRS_WHITE: [i32; 4] = [
     FORWARD - SIDEWARD,
     FORWARD + SIDEWARD,
     FORWARD,
     FORWARD + FORWARD,
 ];
-const BishopDirs: [i32; 4] = [NO, SO, NW, SW];
-const RookDirs: [i32; 4] = [N, O, S, W];
-const KnightDirs: [i32; 8] = [
+const BISHOP_DIRS: [i32; 4] = [NO, SO, NW, SW];
+const ROOK_DIRS: [i32; 4] = [N, O, S, W];
+const KNIGHT_DIRS: [i32; 8] = [
     N + NO,
     N + NW,
     W + NW,
@@ -218,7 +239,7 @@ const KnightDirs: [i32; 8] = [
     S + SO,
     S + SW,
 ];
-const KING_DIRS: [i32; 8] = [N, O, S, W, NO, SO, NW, SW]; // KING_DIRS = BishopDirs + RookDirs
+const KING_DIRS: [i32; 8] = [N, O, S, W, NO, SO, NW, SW]; // KING_DIRS = BISHOP_DIRS + ROOK_DIRS
 
 //Agility = [0, 4, 6, 5, 3, 2, 1] // Pawn .. King, how often is that piece used in smart average game play.
 
@@ -234,7 +255,7 @@ pub const KING_VALUE: i32 = 18000; // more than the summed value of all other pi
 pub const KING_VALUE_DIV_2: i32 = KING_VALUE / 2;
 pub const SURE_CHECKMATE: i32 = KING_VALUE / 2; // still more than the summed value of all other pieces, but less than value of a king
 
-const FigureValue: [i32; KING_ID as usize + 1] = [
+const FIGURE_VALUE: [i32; KING_ID as usize + 1] = [
     VOID_VALUE,
     PAWN_VALUE,
     KNIGHT_VALUE,
@@ -299,7 +320,7 @@ type PawnMarch = [ChessSquares; 4 + 32 + 1]; // array[-4 .. 32, ChessSquares];
 struct Gnu {
     // move precalculation is based on old gnuchess ideas...
     pos: i8,
-    nxtDirIdx: i64,
+    nxt_dir_idx: i64,
 }
 
 type Path = [[Gnu; 64]; 64];
@@ -410,7 +431,7 @@ fn is_a_king(i: i8) -> bool {
     i == W_KING as i8 || i == B_KING as i8
 }
 
-fn col_Idx(c: Color) -> ColorIndex {
+fn col_idx(c: Color) -> ColorIndex {
     (c as i8 + 1) >> 1
 }
 
@@ -446,15 +467,29 @@ fn rows_to_go(p: Position, c: Color) -> i8 {
     }
 }
 
-fn get_TTE<'a>(g: &'a mut Game, key: BitBuffer192, res: &mut HashResult) -> isize {
-    assert!(g.tt.len() == TTE_SIZE);
+fn board_hash(b: Board) -> u64 {
     let mut hasher = DefaultHasher::new();
-    Hash::hash_slice(&key, &mut hasher);
-    let h0 = hasher.finish();
+    Hash::hash_slice(&b, &mut hasher);
+    hasher.finish()
+}
+
+fn bit_buffer_hash(key: &BitBuffer192) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    Hash::hash_slice(&key[0..CORE_BIT_BUFFER_SIZE], &mut hasher);
+    hasher.finish()
+}
+
+fn get_tte<'a>(g: &'a mut Game, key: BitBuffer192) -> isize {
+    assert!(g.tt.len() == TTE_SIZE);
+    let h0 = bit_buffer_hash(&key);
     for i in 0..(TT_TRY + 1) {
         let h = (h0.wrapping_add(i as u64)) as usize & ((TTE_SIZE - 1) as usize);
-        if g.tt[h].key == key {
-            *res = g.tt[h].res.clone();
+        if g.tt[h].key[0..CORE_BIT_BUFFER_SIZE] == key[0..CORE_BIT_BUFFER_SIZE] {
+            if BIT_BUFFER_SIZE == HASH_BIT_BUFFER_SIZE {
+                let bh = board_hash(g.board).to_le_bytes();
+                assert!(key[CORE_BIT_BUFFER_SIZE..HASH_BIT_BUFFER_SIZE] == bh);
+                assert!(g.tt[h].key[CORE_BIT_BUFFER_SIZE..HASH_BIT_BUFFER_SIZE] == bh);
+            }
             return h as isize;
         }
     }
@@ -467,7 +502,7 @@ fn debug_inc(x: &mut i64) {
     }
 }
 
-fn put_TTE(g: &mut Game, key: BitBuffer192, mut res: HashResult, pri: i64, hash_pos: isize) {
+fn put_tte(g: &mut Game, key: BitBuffer192, mut res: HashResult, pri: i64, hash_pos: isize) {
     assert!(g.tt.len() == TTE_SIZE);
     debug_inc(&mut g.table_put);
     if hash_pos >= 0 {
@@ -475,9 +510,7 @@ fn put_TTE(g: &mut Game, key: BitBuffer192, mut res: HashResult, pri: i64, hash_
         g.tt[hash_pos as usize].res = res;
         return;
     }
-    let mut hasher = DefaultHasher::new();
-    Hash::hash_slice(&key, &mut hasher);
-    let h0 = hasher.finish();
+    let h0 = bit_buffer_hash(&key);
     for i in 0..(TT_TRY + 1) {
         let h = (h0.wrapping_add(i as u64)) as usize & ((TTE_SIZE - 1) as usize);
         if g.tt[h].res.pri < pri {
@@ -497,7 +530,7 @@ const HASH_RESULT_ALL_ZERO: HashLine1 = [Guide1 {
     promote_to: 0,
 }; MAX_DEPTH + 1];
 
-fn init_HR(hr: &mut HashResult) {
+fn init_hr(hr: &mut HashResult) {
     hr.score = HASH_RESULT_ALL_ZERO;
     for mut el in hr.floor {
         el.s = INVALID_SCORE;
@@ -505,7 +538,7 @@ fn init_HR(hr: &mut HashResult) {
     hr.state = STATE_PLAYING;
 }
 
-static Figures: [&str; 13] = [
+static FIGURES: [&str; 13] = [
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9a]) },
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9B]) },
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9C]) },
@@ -521,11 +554,11 @@ static Figures: [&str; 13] = [
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x94]) },
 ];
 
-fn p(_b: Board) {
-    #[cfg(feature = "salewskiChessDebug")]
+fn p(b: Board) {
+    //#[cfg(feature = "salewskiChessDebug")]
     {
         for (i, c) in b.iter().enumerate() {
-            print!("{}", Figures[(6 + *c) as usize]);
+            print!("{}", FIGURES[(6 + *c) as usize]);
             if (i + 1) % 8 == 0 {
                 println!("")
             }
@@ -533,7 +566,7 @@ fn p(_b: Board) {
     }
 }
 
-fn pf(_b: Board) {
+fn pf(b: Board) {
     #[cfg(feature = "salewskiChessDebug")]
     {
         for (i, c) in b.iter().enumerate() {
@@ -594,56 +627,54 @@ fn simpleWriteToBitBuffer(g: &Game, c: Color) -> BitBuffer192 {
 }
 */
 
-// experimental compression
+// experimental huffman-like compression
+// needed bytes = (4*6+3*2*2*5+8*2*3+32 + 3)/8.0 = 20.875
+// so 22 bytes should be enough even for an additional queen. But we might use 24 bytes.
 fn much_faster_write_to_bit_buffer(g: &Game, c: Color) -> BitBuffer192 {
-    let mut result: BitBuffer192 = [0; 24];
-    // const L: array[-KING_ID .. KING_ID, int8] = [6.int8, 6, 5, 5, 5, 3, 1, 3, 5, 5, 5, 6, 6]
-    // const CODE: array[-KING_ID .. KING_ID, int8] = [0b111100.int8, 0b111101, 0b11000, 0b11001, 0b11010, 0b100, 0b0, 0b101, 0b11011, 0b11100, 0b11101, 0b111110, 0b111111]
-    const L: [u8; 13] = [6, 6, 5, 5, 5, 3, 1, 3, 5, 5, 5, 6, 6];
-    const CODE: [u8; 13] = [
+    const L: [usize; 13] = [6, 6, 5, 5, 5, 3, 1, 3, 5, 5, 5, 6, 6]; // the number of bits
+    const CODE: [u64; 13] = [
         0b111100, 0b111101, 0b11000, 0b11001, 0b11010, 0b100, 0b0, 0b101, 0b11011, 0b11100,
         0b11101, 0b111110, 0b111111,
-    ];
+    ]; // the huffman bit pattern
     let mut collector: [u8; 4 * 8] = [0; 32];
+    let mut result: BitBuffer192 = [0; BIT_BUFFER_SIZE];
     let mut buf: u64 = 0;
-    let mut shift = 0;
-    let mut bpos = 0;
-    let mut bp;
-    assert!(std::mem::size_of_val(&result) == 24); // 24 byte size should be enough
-    for i in 0..4 {
-        bp = i;
-        for _j in 0..8 {
-            let f = (6 + g.board[bp]) as usize;
-            bp += 8;
-            let newbits: u64 = CODE[f] as u64;
-            buf = buf | (newbits << shift);
-            shift += L[f];
-        }
-        collector[bpos..(bpos + 4)].copy_from_slice(&buf.to_le_bytes()[0..4]);
-        assert!(bpos + 8 <= 32);
-        bpos += shift as usize / 8;
-        let mut r = shift & (!7);
-        buf = buf >> r;
-        shift -= r;
-        bp = i + 4;
-        for _j in 0..8 {
-            let f = (6 + g.board[bp]) as usize;
-            bp += 8;
-            let newbits: u64 = CODE[f] as u64;
-            buf = buf | (newbits << shift);
-            shift += L[f];
-        }
-        collector[bpos..(bpos + 4)].copy_from_slice(&buf.to_le_bytes()[0..4]);
-        assert!(bpos + 8 <= 32);
-        bpos += shift as usize / 8; // >> 3; // div 8
-        r = shift & (!7);
-        buf = buf >> r;
-        shift -= r;
+    let mut shift: usize = 0;
+    let mut bpos: usize = 0; // bype position in collector
+    let mut bp; // board position
+    debug_assert!(std::mem::size_of_val(&result) == BIT_BUFFER_SIZE); // 24 byte size should be enough
+
+    // for color encoding, we assume a board position (-1), which is empty for white and has a pawn for black.
+    if c == COLOR_WHITE as i64 {
+        shift = 1;
+    } else {
+        shift = 3;
+        buf = 0b101
     }
-    result.copy_from_slice(&collector[0..24]);
+    for i in 0..4 {
+        for q in 0..2 {
+            bp = i + 4 * q;
+            for _ in 0..8 {
+                let f = (ARRAY_BASE_6 + g.board[bp]) as usize; // figure
+                bp += 8; // next (row) board position
+                let newbits: u64 = CODE[f];
+                buf = buf | (newbits << shift);
+                shift += L[f];
+            }
+            collector[bpos..(bpos + 8)].copy_from_slice(&buf.to_le_bytes());
+            debug_assert!(bpos + 8 <= collector.len());
+            bpos += shift / 8;
+            let r = shift & (!7);
+            buf = buf >> r;
+            shift &= 7; // shift -= r;
+        }
+    }
+    result[0..CORE_BIT_BUFFER_SIZE].copy_from_slice(&collector[0..CORE_BIT_BUFFER_SIZE]);
     assert!(result[22] == 0);
-    assert!(result[23] == 0);
-    result[23] = c as u8;
+    debug_assert!(result[23] == 0);
+    if BIT_BUFFER_SIZE == HASH_BIT_BUFFER_SIZE {
+        result[24..HASH_BIT_BUFFER_SIZE].copy_from_slice(&board_hash(g.board).to_le_bytes());
+    } // sanity check with hash
     result
 }
 
@@ -680,7 +711,7 @@ fn pawnmove_is_valid(c: Color, src: Position, dst: Position) -> bool {
 fn init_rook(g: &mut Game) {
     for src in POS_RANGE {
         let mut i = 0;
-        for d in RookDirs {
+        for d in ROOK_DIRS {
             let mut pos = src;
             loop {
                 let dst = pos + d as i8;
@@ -692,13 +723,13 @@ fn init_rook(g: &mut Game) {
                 pos = dst;
             }
         }
-        let mut nxtDirStart = i; // index of the last terminal node
+        let mut nxt_dir_start = i; // index of the last terminal node
         g.rook_path[src as usize][i].pos = -1; // terminator
         while i > 0 {
             i -= 1;
-            g.rook_path[src as usize][i].nxtDirIdx = nxtDirStart as i64;
+            g.rook_path[src as usize][i].nxt_dir_idx = nxt_dir_start as i64;
             if g.rook_path[src as usize][i].pos < 0 {
-                nxtDirStart = i;
+                nxt_dir_start = i;
                 g.rook_path[src as usize][i].pos *= -1;
             }
         }
@@ -708,7 +739,7 @@ fn init_rook(g: &mut Game) {
 fn init_bishop(g: &mut Game) {
     for src in POS_RANGE {
         let mut i = 0;
-        for d in BishopDirs {
+        for d in BISHOP_DIRS {
             let mut pos = src;
             loop {
                 let dst = pos + d as i8;
@@ -721,7 +752,7 @@ fn init_bishop(g: &mut Game) {
                 pos = dst;
             }
         }
-        let mut nxtDirStart = i;
+        let mut nxt_dir_start = i;
         g.bishop_path[src as usize][i].pos = -1;
         g.freedom[(ARRAY_BASE_6 + W_BISHOP) as usize][src as usize] = ((i as i32 - 10) * 4) as i64; // range -12..12 // abs val is big enough, so exchange of a
         g.freedom[(ARRAY_BASE_6 + W_QUEEN) as usize][src as usize] = ((i as i32 - 10) * 4) as i64; // range -12..12 // pawn for very good position may occur
@@ -729,9 +760,9 @@ fn init_bishop(g: &mut Game) {
         g.freedom[(ARRAY_BASE_6 + B_QUEEN) as usize][src as usize] = ((i as i32 - 10) * 4) as i64;
         while i > 0 {
             i -= 1;
-            g.bishop_path[src as usize][i].nxtDirIdx = nxtDirStart as i64;
+            g.bishop_path[src as usize][i].nxt_dir_idx = nxt_dir_start as i64;
             if g.bishop_path[src as usize][i].pos < 0 {
-                nxtDirStart = i;
+                nxt_dir_start = i;
                 g.bishop_path[src as usize][i].pos *= -1;
             }
         }
@@ -741,10 +772,10 @@ fn init_bishop(g: &mut Game) {
 fn init_knight(g: &mut Game) {
     for src in POS_RANGE {
         let mut i = 0;
-        for d in KnightDirs {
+        for d in KNIGHT_DIRS {
             if knightmove_is_valid(src, src + d as i8) {
                 g.knight_path[src as usize][i].pos = (src + d as i8) as i8;
-                g.knight_path[src as usize][i].nxtDirIdx = (i + 1) as i64; // not really needed
+                g.knight_path[src as usize][i].nxt_dir_idx = (i + 1) as i64; // not really needed
                 i += 1;
             }
         }
@@ -760,7 +791,7 @@ fn init_king(g: &mut Game) {
         for d in KING_DIRS {
             if move_is_valid(src, src + d as i8) {
                 g.king_path[src as usize][i].pos = (src + d as i8) as i8;
-                g.king_path[src as usize][i].nxtDirIdx = (i + 1) as i64;
+                g.king_path[src as usize][i].nxt_dir_idx = (i + 1) as i64;
                 i += 1;
             }
         }
@@ -776,17 +807,17 @@ fn init_king(g: &mut Game) {
 fn init_pawn(g: &mut Game, color: Color) {
     for src in POS_RANGE {
         let mut i = 0;
-        for d in PawnDirsWhite {
-            g.pawn_path[col_Idx(color) as usize][src as usize][i].pos =
+        for d in PAWN_DIRS_WHITE {
+            g.pawn_path[col_idx(color) as usize][src as usize][i].pos =
                 if pawnmove_is_valid(color, src, (src as i32 + d * color as i32) as i8) {
                     (src as i8 + (d * (color as i32)) as i8) as i8
                 } else {
                     -1
                 };
-            g.pawn_path[col_Idx(color) as usize][src as usize][i].nxtDirIdx = i as i64 + 1; // not really needed
+            g.pawn_path[col_idx(color) as usize][src as usize][i].nxt_dir_idx = i as i64 + 1; // not really needed
             i += 1;
         }
-        g.pawn_path[col_Idx(color) as usize][src as usize][i as usize].pos = -1;
+        g.pawn_path[col_idx(color) as usize][src as usize][i as usize].pos = -1;
     }
 }
 
@@ -811,6 +842,7 @@ fn fast_del_invalid(a: &mut Vec<KK>) {
 // fn insertion_sort<T: std::cmp::Ord>(arr: &mut [T]) {
 // must be a stable sort!
 fn ixsort(arr: &mut Vec<KK>, high: usize) {
+    //assert!(high > 0);
     for i in 1..(high + 1) {
         let mut j = i;
         while j > 0 && arr[j].s > arr[j - 1].s {
@@ -857,7 +889,7 @@ fn walk_rook(g: &Game, kk: KK, s: &mut KKS) {
         {
             i += 1;
         } else {
-            i = g.rook_path[kk.si as usize][i as usize].nxtDirIdx;
+            i = g.rook_path[kk.si as usize][i as usize].nxt_dir_idx;
         }
         if wanted(kk) {
             s.push(kk)
@@ -880,7 +912,7 @@ fn walk_bishop(g: &Game, kk: KK, s: &mut KKS) {
         {
             i += 1
         } else {
-            i = g.bishop_path[kk.si as usize][i as usize].nxtDirIdx
+            i = g.bishop_path[kk.si as usize][i as usize].nxt_dir_idx
         }
         if wanted(kk) {
             s.push(kk)
@@ -925,10 +957,10 @@ fn walk_knight(g: &Game, kk: KK, s: &mut KKS) {
 // now we generate all possible ep captures -- before performing the actual move, we have to check ep_pos value
 fn walk_pawn(g: &Game, kk: KK, s: &mut KKS) {
     let mut kk = kk;
-    let col_Idx = (kk.sf + 1) / 2;
+    let col_idx = (kk.sf + 1) / 2;
     for i in 0..2 {
         if {
-            kk.di = g.pawn_path[col_Idx as usize][kk.si as usize][i].pos;
+            kk.di = g.pawn_path[col_idx as usize][kk.si as usize][i].pos;
             kk.di
         } >= 0
         {
@@ -961,7 +993,7 @@ fn walk_pawn(g: &Game, kk: KK, s: &mut KKS) {
     if kk.s >= 0 {
         for i in 2..4 {
             if {
-                kk.di = g.pawn_path[col_Idx as usize][kk.si as usize][i as usize].pos;
+                kk.di = g.pawn_path[col_idx as usize][kk.si as usize][i as usize].pos;
                 kk.di
             } >= 0
             {
@@ -1001,7 +1033,7 @@ fn plain_evaluate_board(g: &Game) -> i64 {
     let mut result: i64 = 0;
     for (p, f) in g.board.iter().enumerate() {
         // if f != VOID_ID -- does not increase performance
-        result += (FigureValue[f.abs() as usize] + g.freedom[(6 + *f) as usize][p as usize] as i32)
+        result += (FIGURE_VALUE[f.abs() as usize] + g.freedom[(6 + *f) as usize][p as usize] as i32)
             as i64
             * (sign(*f) as i64) as i64;
     }
@@ -1169,7 +1201,7 @@ fn abeta(
     assert!(std::mem::size_of::<KK>() == 8);
     assert!(old_list_len >= 0);
     assert!((-1..63).contains(&ep_pos));
-    let mut hash_res: HashResult = HashResult::default();
+    let mut hash_res: HashResult; // = HashResult::default();
     let mut sdi: [i64; 7] = [0; 7];
     let mut ddi: [i64; 7] = [0; 7];
     let mut nep_pos: i64;
@@ -1177,10 +1209,9 @@ fn abeta(
     let mut eval_cnt: i64 = 0;
     let mut alpha: i64 = alpha_0;
     let mut valid_move_found: bool = false; // = false
-
+    let mut fromc: bool = false;
     //when compileOption("assertions"):
-    //  var back = board // test board integrity
-
+    let back = g.board; // test board integrity
     let mut result: Move = Move {
         src: 0,
         dst: 0,
@@ -1192,8 +1223,11 @@ fn abeta(
     result.state = STATE_NO_VALID_MOVE;
     let v_depth = v_depth - V_RATIO as i64;
     let encoded_board = encode_board(&g, color);
-    let hash_pos = get_TTE(g, encoded_board, &mut hash_res);
+    let hash_pos = get_tte(g, encoded_board);
     if hash_pos >= 0 {
+        fromc = true;
+        hash_res = g.tt[hash_pos as usize].res.clone();
+        assert!(hash_res.kks.len() > 0);
         // we have the list of moves, and maybe the exact score, or a possible beta cutoff
         debug_inc(&mut g.hash_succ);
         for i in (depth_0..(MAX_DEPTH + 1) as usize).rev() {
@@ -1228,7 +1262,8 @@ fn abeta(
         lift(&mut g.tt[hash_pos as usize].res.pri, depth_0 as i64); // avoid that this entry in tt is overwritten by recursive abeta() calls!
     } else {
         // we have to create the move list
-        init_HR(&mut hash_res);
+        hash_res = HashResult::default();
+        init_hr(&mut hash_res);
     }
 
     //when false: // possible, but makes not much sense
@@ -1246,7 +1281,7 @@ fn abeta(
                 old_list_len,
                 -1,
             );
-            hash_pos = get_TTE(&g, encoded_board, &mut hash_res);
+            hash_pos = get_tte(&g, encoded_board, &mut hash_res);
         }
     }
     */
@@ -1262,7 +1297,6 @@ fn abeta(
             return result;
         }
     }
-
     if hash_pos < 0 {
         // generate the move list, including possible castlings and en passant moves
         let mut s: Vec<KK> = Vec::with_capacity(63);
@@ -1351,6 +1385,7 @@ fn abeta(
             }
         }
         for el in &mut s {
+            assert!(g.board[el.si as usize] != 0);
             // guessed ratings of the moves
             el.eval_depth = -1; // mark as unevaluated
                                 //when compileOption("assertions"):
@@ -1365,8 +1400,8 @@ fn abeta(
                     assert!(el.promote_to == 0);
                 }
             }
-            el.s = (FigureValue[el.promote_to.abs() as usize]
-                + FigureValue[el.df.abs() as usize]
+            el.s = (FIGURE_VALUE[el.promote_to.abs() as usize]
+                + FIGURE_VALUE[el.df.abs() as usize]
                 + g.freedom[(6 + el.sf) as usize][(0 + el.di) as usize] as i32
                 - g.freedom[(6 + el.sf) as usize][(0 + el.si) as usize] as i32)
                 as i16;
@@ -1374,7 +1409,9 @@ fn abeta(
         let h = s.len() - 1;
         ixsort(&mut s, h); // s.len() - 1);
         assert!(is_sorted(&s, h));
+        s.shrink_to_fit();
         hash_res.kks = s;
+        assert!(hash_res.kks.len() > 0);
     }
     if depth_0 == 0 {
         // // more detailed null move estimation for quiescence search
@@ -1395,18 +1432,21 @@ fn abeta(
     }
     result.control = hash_res.control.clone();
     hash_res.kks_high = -1; // the number of newly evaluated positions, we sort only this range.
-
     result.score = evaluation; // LOWEST_SCORE for depth_0 > 0
     assert!(depth_0 == 0 || result.score == LOWEST_SCORE as i64);
     assert!(hash_res.score[depth_0].s == INVALID_SCORE);
     let hash_res_kks_len = hash_res.kks.len() as i64;
+    if hash_res.kks.len() == 0 {
+        println!("*****************");
+    }
+    assert!(hash_res.kks.len() > 0);
     for el in &mut hash_res.kks {
         if el.s == IGNORE_MARKER_LOW_INT16 {
-            assert!(false); // we actually delete invalid entries, so nothing to skip
+            //assert!(false); // we actually delete invalid entries, so nothing to skip
             continue;
         }
         assert!(el.s != IGNORE_MARKER_LOW_INT16);
-        assert!(g.board[el.si as usize] != VOID_ID);
+        assert!(g.board[el.si as usize] != VOID_ID); // issue TODO
         hash_res.kks_high += 1; // the number of up to date positions, which we have to sort later
         if depth_0 == 0 && el.df == VOID_ID as i8 {
             // skip non-captures in quiescence search
@@ -1424,7 +1464,6 @@ fn abeta(
                 break;
             }
         }
-
         let mut m: Move = Move {
             src: 0,
             dst: 0,
@@ -1482,15 +1521,15 @@ fn abeta(
                         v_depth_inc = 2;
                     }
                     if EQUAL_CAPTURE_EXTEND || LARGE_CAPTURE_EXTEND {
-                        let immediateGain =
-                            FigureValue[el.df.abs() as usize] - FigureValue[el.sf.abs() as usize];
+                        let immediate_gain =
+                            FIGURE_VALUE[el.df.abs() as usize] - FIGURE_VALUE[el.sf.abs() as usize];
                         if LARGE_CAPTURE_EXTEND {
-                            if immediateGain > PAWN_VALUE {
+                            if immediate_gain > PAWN_VALUE {
                                 v_depth_inc = 4;
                             }
                         }
                         if EQUAL_CAPTURE_EXTEND {
-                            if immediateGain.abs() < 10 {
+                            if immediate_gain.abs() < 10 {
                                 v_depth_inc = 2;
                             }
                         }
@@ -1533,7 +1572,7 @@ fn abeta(
                 hash_res.state = STATE_CAN_CAPTURE_KING;
                 hash_res.score[MAX_DEPTH as usize].s = result.score as i16; // MAX_DEPTH, as it is the final score
                 assert!(hash_pos < 0); // once stored, we just retrieve it
-                put_TTE(g, encoded_board, hash_res, depth_0 as i64, hash_pos); // store this for a fast return next time
+                                       //put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos); // store this for a fast return next time
                 return result;
             }
             g.board[el.si as usize] = VOID_ID; // the basic movement
@@ -1657,7 +1696,7 @@ fn abeta(
                 //assert!(is_sorted(&hash_res.kks, hash_res.kks_high as usize));
                 //assert!(hash_res.floor[depth_0 as usize].s < m.score as i16); // always true, due to beta cutoff test at top of proc
                 hash_res.floor[depth_0].s = pmq(m.score, cup) as i16;
-                put_TTE(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
+                put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
                 result.score = beta;
                 return result;
             }
@@ -1704,11 +1743,16 @@ fn abeta(
             println!("{:?}", hash_res.kks);
         }
     }
-    put_TTE(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
-    if false {
+    if hash_res.kks.len() == 0 {
+        println!("hash_res.kks.len() == 0");
+        put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
+    } else {
+        put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
+    }
+    if true {
         //when compileOption("assertions"):
-        //assert!(back == g.board);
-        println!("");
+        assert!(back == g.board);
+        //println!("");
     }
     result
 }
@@ -1733,9 +1777,7 @@ fn check_mate_in(score: i64) -> i64 {
     }
 }
 
-//var debug_list = newSeq[string]()
-
-fn alphabeta(g: &mut Game, color: Color, depth: i64, epPos: i64) -> Move {
+fn alphabeta(g: &mut Game, color: Color, depth: i64, ep_pos: i64) -> Move {
     g.cut_time = Duration::from_millis(1_700);
     g.start_time = Instant::now();
     reset_statistics(g);
@@ -1747,7 +1789,7 @@ fn alphabeta(g: &mut Game, color: Color, depth: i64, epPos: i64) -> Move {
         -AB_INF as i64,
         AB_INF as i64,
         20,
-        epPos,
+        ep_pos,
     );
     //when defined(salewskiChessDebug):
     if true {
@@ -2024,7 +2066,7 @@ fn setup_endgame(g: &mut Game) -> bool {
         {
             continue; // of course with only two knights it is hard, but one may try.
         }
-        let oppKing = -s * KING_ID;
+        let opp_king = -s * KING_ID;
         for i in POS_RANGE {
             if p[(ARRAY_BASE_6 + QUEEN_ID) as usize * s as usize]
                 + p[(ARRAY_BASE_6 + ROOK_ID) as usize * s as usize]
@@ -2034,23 +2076,23 @@ fn setup_endgame(g: &mut Game) -> bool {
                 // chase to selected corner
                 if odd(col(b[(s + 1) as usize] as i8) as i8) != odd(row(b[(s + 1) as usize] as i8))
                 {
-                    g.freedom[oppKing as usize][i as usize] =
+                    g.freedom[opp_king as usize][i as usize] =
                         -sqr(row(i) as i64 - col(i) as i64) as i64; // sqr may be better than abs when both sites are
                 } else {
                     // struggling, i.e. K + B + B vs K + B
-                    g.freedom[oppKing as usize][i as usize] =
+                    g.freedom[opp_king as usize][i as usize] =
                         -sqr(row(i) as i64 + col(i) as i64 - 7) as i64;
                 }
             } else {
                 // chase to border and/or arbitrary corner
-                g.freedom[oppKing as usize][i as usize] =
+                g.freedom[opp_king as usize][i as usize] =
                     -sqr((2 * row(i) - 7).abs() as i64 + (2 * col(i) - 7).abs() as i64 / 2);
             }
         }
         //if s == -1: echo "White King" else: echo "Black King"
         //for i, f in board:
         //  if i mod 8 == 0: echo("")
-        //  write(stdout, $freedom[oppKing][i]); write(stdout, " ");
+        //  write(stdout, $freedom[opp_king][i]); write(stdout, " ");
         //echo ""
     }
     return true;
@@ -2074,7 +2116,7 @@ pub fn reply(g: &mut Game) -> Move {
         }
     }
 
-    let Time = Duration::from_millis(1_300);
+    let time = Duration::from_millis(1_300);
     let mut depth = 0;
 
     let start_time = Instant::now(); // cpuTime();
@@ -2100,9 +2142,12 @@ pub fn reply(g: &mut Game) -> Move {
         if result.score.abs() > SURE_CHECKMATE as i64 {
             break;
         }
-        if start_time.elapsed() > Time {
+        if start_time.elapsed() > time {
             //debugEcho "Time: ", cpuTime() - start_time
-            println!("timebreak{}", start_time.elapsed().as_secs());
+            println!(
+                "timebreak: {}",
+                start_time.elapsed().as_millis() as f64 * 1e-3
+            );
             break;
         }
     }
@@ -2206,4 +2251,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2209 lines 455 as
+// 2255 lines 454 as
