@@ -1812,9 +1812,9 @@ const FLAG_PROCAP: i32 = 4;
 
 pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
     p(g.board);
-    let mut result: i64 = 0;
+    let mut result: i32 = 0;
     if !is_void_at(&g, p1) {
-        result = FLAG_CAPTURE as i64;
+        result = FLAG_CAPTURE;
     }
     if !silent {
         g.has_moved.insert(p0 as usize);
@@ -1833,19 +1833,19 @@ pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
         }
     } else if base_row(p1) && is_a_pawn_at(&g, p0) {
         g.board[p0 as usize] *= QUEEN_ID;
-        result = if result == FLAG_CAPTURE as i64 {
-            FLAG_PROCAP as i64
+        result = if result == FLAG_CAPTURE {
+            FLAG_PROCAP
         } else {
-            FLAG_PROMOTION as i64
+            FLAG_PROMOTION
         }
     } else if is_a_pawn_at(&g, p0) && is_void_at(&g, p1) && odd(p1 - p0) {
-        result = FLAG_EP as i64;
+        result = FLAG_EP;
         g.board[p1 as usize - g.board[p0 as usize] as usize * 8] = VOID_ID;
     }
     g.board[p1 as usize] = g.board[p0 as usize];
     g.board[p0 as usize] = VOID_ID;
     if !silent {
-        if is_a_pawn_at(&g, p1) || result != FLAG_PLAIN as i64 {
+        if is_a_pawn_at(&g, p1) || result != FLAG_PLAIN {
             g.history = HashMap::new();
         } else {
             let new_state = encode_board(&g, sign(g.board[p1 as usize]) as Color);
@@ -1855,13 +1855,13 @@ pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
     //when defined(salewskiChessDebug):
     if false {
         if !silent {
-            g.debug_list.push(move_to_str(&g, p0, p1, result as i32));
+            g.debug_list.push(move_to_str(&g, p0, p1, result));
             println!("--");
             //for el in debug_list: echo el
         }
     }
     p(g.board);
-    result as i32
+    result
 }
 
 pub fn tag(g: &mut Game, si: i64) -> KKS {
@@ -2251,4 +2251,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2255 lines 454 as
+// 2254 lines 446 as
