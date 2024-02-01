@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 26-JAN-2024
+// v 0.2 -- 01-FEB-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -156,6 +156,14 @@ pub fn new_game() -> Game {
     init_knight(&mut g);
     init_king(&mut g);
     init_rook(&mut g);
+
+    //g.board = [0; 64];
+
+    //set_board(&mut g, B_KING, BC, B3);
+    //set_board(&mut g, W_KING, BA, B1);
+    //set_board(&mut g, B_BISHOP, BC, B2);
+    //set_board(&mut g, B_BISHOP, BE, B5);
+
     g
 }
 
@@ -273,24 +281,25 @@ const SETUP: [i64; 64] = [
 ];
 
 // the traditional row and column designators -- B prefix for Board
-const BA: i32 = 7;
-const BB: i32 = 6;
-const BC: i32 = 5;
-const BD: i32 = 4;
-const BE: i32 = 3;
-const BF: i32 = 2;
-const BG: i32 = 1;
-const BH: i32 = 0;
-const B1: i32 = 0;
-const B2: i32 = 1;
-const B3: i32 = 2;
-const B4: i32 = 3;
-const B5: i32 = 4;
-const B6: i32 = 5;
-const B7: i32 = 6;
-const B8: i32 = 7;
+const BA: usize = 7;
+const BB: usize = 6;
+const BC: usize = 5;
+const BD: usize = 4;
+const BE: usize = 3;
+const BF: usize = 2;
+const BG: usize = 1;
+const BH: usize = 0;
+const B1: usize = 0;
+const B2: usize = 1;
+const B3: usize = 2;
+const B4: usize = 3;
+const B5: usize = 4;
+const B6: usize = 5;
+const B7: usize = 6;
+const B8: usize = 7;
 
 const POS_RANGE: Range<i8> = 0..64;
+const POS_RANGE_US: Range<usize> = 0..64;
 
 type Color = i64;
 const COLOR_BLACK: i32 = -1;
@@ -372,7 +381,6 @@ struct HashResult {
     score: HashLine1, // exact values
     floor: HashLine2, // lower bounds
     kks: KKS,
-    kks_high: i64,
     pri: i64,
     king_pos: i64,
     pop_cnt: i64,
@@ -532,7 +540,8 @@ const HASH_RESULT_ALL_ZERO: HashLine1 = [Guide1 {
 
 fn init_hr(hr: &mut HashResult) {
     hr.score = HASH_RESULT_ALL_ZERO;
-    for mut el in hr.floor {
+    //for mut el in hr.floor {
+    for el in &mut hr.floor {
         el.s = INVALID_SCORE;
     }
     hr.state = STATE_PLAYING;
@@ -555,7 +564,7 @@ static FIGURES: [&str; 13] = [
 ];
 
 fn p(b: Board) {
-    //#[cfg(feature = "salewskiChessDebug")]
+    #[cfg(feature = "salewskiChessDebug")]
     {
         for (i, c) in b.iter().enumerate() {
             print!("{}", FIGURES[(6 + *c) as usize]);
@@ -841,9 +850,9 @@ fn fast_del_invalid(a: &mut Vec<KK>) {
 // https://rosettacode.org/wiki/Sorting_algorithms/Insertion_sort#Rust
 // fn insertion_sort<T: std::cmp::Ord>(arr: &mut [T]) {
 // must be a stable sort!
-fn ixsort(arr: &mut Vec<KK>, high: usize) {
+fn ixsort(arr: &mut Vec<KK>, highl: usize) {
     //debug_assert!(high > 0);
-    for i in 1..(high + 1) {
+    for i in 1..highl {
         let mut j = i;
         while j > 0 && arr[j].s > arr[j - 1].s {
             arr.swap(j, j - 1);
@@ -853,12 +862,13 @@ fn ixsort(arr: &mut Vec<KK>, high: usize) {
     fast_del_invalid(arr); // we can delete them, or just skip them
 }
 
-fn is_sorted(a: &Vec<KK>, high: usize) -> bool {
-    let mut i = high;
-    while i > 0 && a[i].s <= a[i - 1].s {
+// test for descending
+fn is_sorted(a: &Vec<KK>, len: usize) -> bool {
+    let mut i = len;
+    while i > 1 && a[i - 2].s >= a[i - 1].s {
         i -= 1;
     }
-    return i <= 0;
+    i <= 1
 }
 
 fn capture(kk: KK) -> bool {
@@ -1057,7 +1067,7 @@ i64 alphaBeta( i64 alpha, i64 beta, i64 depthleft ) {
 """
 */
 
-fn in_check(g: &Game, si: i64, col: Color) -> bool {
+fn in_check(g: &Game, si: usize, col: Color) -> bool {
     let mut kk: KK = KK {
         s: 0,
         sf: 0,
@@ -1116,11 +1126,11 @@ fn in_check(g: &Game, si: i64, col: Color) -> bool {
         .is_some()
 }
 
-fn king_pos(g: &Game, c: Color) -> Position {
+fn king_pos(g: &Game, c: Color) -> usize {
     let k = KING_ID * c as i64;
     for (i, f) in g.board.iter().enumerate() {
         if *f == k {
-            return i as Position;
+            return i as usize;
         }
     }
     debug_assert!(false);
@@ -1211,8 +1221,8 @@ fn abeta(
     let mut valid_move_found: bool = false;
     let back: Board;
     //if cfg!(debug_assertions) {
-      back = g.board; // test board integrity
-    //}
+    back = g.board; // test board integrity
+                    //}
     let mut result: Move = Default::default();
     result.state = STATE_NO_VALID_MOVE;
     let v_depth = v_depth - V_RATIO as i64;
@@ -1246,6 +1256,7 @@ fn abeta(
             }
             if pmq(hash_res.floor[i].s as i64, -cup) >= beta {
                 // a beta cutoff
+                //println!("-->>{} {}", hash_res.floor[i].s, beta);
                 result.score = beta;
                 debug_inc(&mut g.floor_hash_succ);
                 return result;
@@ -1322,7 +1333,8 @@ fn abeta(
         }
         debug_assert!(hash_res.pop_cnt <= 32); // for regular games
         if cup < 3 {
-            hash_res.in_check = in_check(&g, hash_res.king_pos, color); // this field is optional information
+            hash_res.in_check = in_check(&g, hash_res.king_pos as usize, color);
+            // this field is optional information
         }
         for el in &s {
             if !is_a_pawn(el.sf) || odd(el.si - el.di) {
@@ -1390,9 +1402,9 @@ fn abeta(
                 - g.freedom[(6 + el.sf) as usize][(0 + el.si) as usize] as i32)
                 as i16;
         }
-        let h = s.len() - 1;
-        ixsort(&mut s, h); // s.len() - 1);
-        debug_assert!(is_sorted(&s, h));
+        let h = s.len();
+        ixsort(&mut s, h);
+        debug_assert!(is_sorted(&s, s.len()));
         s.shrink_to_fit();
         hash_res.kks = s;
         debug_assert!(hash_res.kks.len() > 0);
@@ -1415,23 +1427,23 @@ fn abeta(
         lift(&mut alpha, evaluation);
     }
     result.control = hash_res.control.clone();
-    hash_res.kks_high = -1; // the number of newly evaluated positions, we sort only this range.
+    let mut hash_res_kks_high: usize = 0; // the number of newly evaluated positions, we sort only this range.
     result.score = evaluation; // LOWEST_SCORE for depth_0 > 0
     debug_assert!(depth_0 == 0 || result.score == LOWEST_SCORE as i64);
     debug_assert!(hash_res.score[depth_0].s == INVALID_SCORE);
     let hash_res_kks_len = hash_res.kks.len() as i64;
     if hash_res.kks.len() == 0 {
-        println!("*****************");
+        //println!("*****************");
     }
-    debug_assert!(hash_res.kks.len() > 0);
+    //debug_assert!(hash_res.kks.len() > 0); occurs in endgame?
     for el in &mut hash_res.kks {
         if el.s == IGNORE_MARKER_LOW_INT16 {
-            //debug_assert!(false); // we actually delete invalid entries, so nothing to skip
+            debug_assert!(false); // we actually delete invalid entries, so nothing to skip
             continue;
         }
         debug_assert!(el.s != IGNORE_MARKER_LOW_INT16);
         debug_assert!(g.board[el.si as usize] != VOID_ID); // issue TODO
-        hash_res.kks_high += 1; // the number of up to date positions, which we have to sort later
+        hash_res_kks_high += 1; // the number of up to date positions, which we have to sort later
         if depth_0 == 0 && el.df == VOID_ID as i8 {
             // skip non-captures in quiescence search
             continue;
@@ -1440,22 +1452,15 @@ fn abeta(
             //debugEcho ":", (getMonoTime() - start_time).inNanoSeconds.float / 1e9 , " ", hash_res.kks.len
             //if eval_cnt > 1 && Instant::now() > g.cut_time as Instant {
             if eval_cnt > 1 && g.start_time.elapsed() > g.cut_time {
-                //debugEcho "break", eval_cnt, " ", hash_res.kks_high
-                println!("cut_timeBreak{} {}", eval_cnt, hash_res.kks_high);
+                //debugEcho "break", eval_cnt, " ", hash_res_kks_high
+                println!("cut_timeBreak{} {}", eval_cnt, hash_res_kks_high);
                 if cfg!(feature = "salewskiChessDebug") {
                     println!("{:?}", hash_res.kks);
                 }
                 break;
             }
         }
-        let mut m: Move = Move {
-            src: 0,
-            dst: 0,
-            score: 0,
-            control: BitSet::new(),
-            promote_to: 0,
-            state: 0,
-        };
+        let mut m: Move = Default::default();
         if el.eval_depth >= depth_0 as i8 {
             // this move was already evaluated, but was not good enough, no beta cutoff
             valid_move_found = true; // list contains only valid moves, as we delete or skip the invalid ones
@@ -1556,7 +1561,7 @@ fn abeta(
                 hash_res.state = STATE_CAN_CAPTURE_KING;
                 hash_res.score[MAX_DEPTH as usize].s = result.score as i16; // MAX_DEPTH, as it is the final score
                 debug_assert!(hash_pos < 0); // once stored, we just retrieve it
-                                       //put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos); // store this for a fast return next time
+                put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos); // store this for a fast return next time
                 return result;
             }
             g.board[el.si as usize] = VOID_ID; // the basic movement
@@ -1600,12 +1605,11 @@ fn abeta(
             } else {
                 // deal with repetive positions
                 let new_state = encode_board(&g, color); // this is the new board state after a piece is moved
-                if g.history[&new_state] >= 2 {
+                if g.history.contains_key(&new_state) && g.history[&new_state] >= 2 {
                     // this will be the third repetition, so draw can be requested
                     m.score = 0; // draw
                 } else {
                     g.history.insert(new_state, 1);
-                    //*counts.entry(word).or_insert(0) += 1;
                     m = abeta(
                         g,
                         opp_color(color),
@@ -1675,9 +1679,9 @@ fn abeta(
                 }
             }
             if m.score >= beta {
-                // debug_assert!(is_sorted2(hash_res.kks, hash_res.kks_high + 1, hash_res.kks.high)) // no, can be more than one partition
-                ixsort(&mut hash_res.kks, hash_res.kks_high as usize);
-                //debug_assert!(is_sorted(&hash_res.kks, hash_res.kks_high as usize));
+                // debug_assert!(is_sorted2(hash_res.kks, hash_res_kks_high + 1, hash_res.kks.high)) // no, can be more than one partition
+                ixsort(&mut hash_res.kks, hash_res_kks_high);
+                //debug_assert!(is_sorted(&hash_res.kks, hash_res_kks_high as usize));
                 //debug_assert!(hash_res.floor[depth_0 as usize].s < m.score as i16); // always true, due to beta cutoff test at top of proc
                 hash_res.floor[depth_0].s = pmq(m.score, cup) as i16;
                 put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
@@ -1694,7 +1698,7 @@ fn abeta(
         }
     }
     if depth_0 > 0 && !valid_move_found {
-        if in_check(&g, hash_res.king_pos, color) {
+        if in_check(&g, hash_res.king_pos as usize, color) {
             result.state = STATE_CHECKMATE;
             result.score = -KING_VALUE as i64 + cup as i64 - 1;
         } else {
@@ -1707,7 +1711,7 @@ fn abeta(
 
     debug_assert!(hash_res.score[depth_0].s == INVALID_SCORE);
     //debug_assert!(hash_res.kks_high == hash_res.kks.high) // not always, due to cut_time break for cup == 0
-    ixsort(&mut hash_res.kks, hash_res.kks_high as usize);
+    ixsort(&mut hash_res.kks, hash_res_kks_high);
     if result.score > alpha_0 || result.state == STATE_CHECKMATE || result.state == STATE_STALEMATE
     {
         // otherwise our abeta() call did a beta cutoff, so we have no real score
@@ -1727,16 +1731,10 @@ fn abeta(
             println!("{:?}", hash_res.kks);
         }
     }
-    if hash_res.kks.len() == 0 {
-        println!("hash_res.kks.len() == 0");
-        put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
-    } else {
-        put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
-    }
+    // debug_assert!(hash_res.kks.len() > 0); // len() is 0 for checkmate
+    put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos);
     if cfg!(debug_assertions) {
-        //when compileOption("assertions"):
         debug_assert!(back == g.board);
-        //println!("");
     }
     result
 }
@@ -1868,8 +1866,8 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
         _ => {}
     }
     if si == 3 || si == 3 + 7 * 8 {
-        const // king, void, void, void, rook, kingDelta, rookDelta -- rookDelta is unused!
-      Q: [[i32; 7]; 2] = [[3, 2, 1, 1, 0, -2, 2], [3, 4, 5, 6, 7, 2, -3]];
+        const // king, void, void, void, rook, kingDelta+2
+      Q: [[usize; 6]; 2] = [[3, 2, 1, 1, 0, 0], [3, 4, 5, 6, 7, 4]];
         let k = W_KING * color as i64;
         let r = W_ROOK * color as i64;
         for i in 0..(1 + 1) {
@@ -1880,16 +1878,19 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
                     q[j as usize] += 7 * 8;
                 }
             }
-            if g.board[q[0] as usize] == k
-                && g.board[q[1] as usize] == 0
-                && g.board[q[2] as usize] == 0
-                && g.board[q[3] as usize] == 0
-                && g.board[q[4] as usize] == r
-                && !g.has_moved.contains(q[0] as usize)
-                && !g.has_moved.contains(q[4] as usize)
+            if g.board[q[0]] == k
+                && g.board[q[1]] == 0
+                && g.board[q[2]] == 0
+                && g.board[q[3]] == 0
+                && g.board[q[4]] == r
+                && !g.has_moved.contains(q[0])
+                && !g.has_moved.contains(q[4])
             {
-                if !(in_check(&g, q[1] as i64, color) || in_check(&g, q[2] as i64, color)) {
-                    kk.di = (q[0] + q[5]) as i8;
+                if !(in_check(&g, q[0], color)
+                    || in_check(&g, q[1], color)
+                    || in_check(&g, q[2], color))
+                {
+                    kk.di = (q[0] + q[5] - 2) as i8;
                     s.push(kk);
                 }
             }
@@ -1898,7 +1899,7 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
     let backup = g.board;
     for el in &mut s {
         do_move(g, si as i8, el.di, true);
-        if in_check(&g, king_pos(&g, color) as i64, color) {
+        if in_check(&g, king_pos(&g, color), color) {
             el.s = 0
         }
         g.board = backup;
@@ -1954,7 +1955,7 @@ pub fn move_to_str(g: &Game, si: Position, di: Position, flag: i32) -> String {
         }
         if in_check(
             &g,
-            king_pos(&g, (-sign(g.board[di as usize])) as Color) as i64,
+            king_pos(&g, (-sign(g.board[di as usize])) as Color),
             (-sign(g.board[di as usize])) as Color,
         ) {
             result.push_str(" +");
@@ -2026,28 +2027,25 @@ fn setup_endgame(g: &mut Game) -> bool {
     if h[0] > 3 || h[2] > 3 {
         return false;
     }
-    for i in B_KING..(W_KING + 1) {
-        for j in POS_RANGE {
-            g.freedom[i as usize][j as usize] = 0
+    for i in (B_KING + ARRAY_BASE_6) as usize..(W_KING + ARRAY_BASE_6 + 1) as usize {
+        for j in POS_RANGE_US {
+            g.freedom[i][j] = 0
         }
     }
     for s in [-1, 1] {
         // black, white -- set the hunting matrix for opposite king
-        if p[(ARRAY_BASE_6 + QUEEN_ID) as usize * s as usize]
-            + p[(ARRAY_BASE_6 + ROOK_ID) as usize * s as usize]
-            == 0
-            && p[(ARRAY_BASE_6 + BISHOP_ID) as usize * s as usize]
-                + p[(ARRAY_BASE_6 + KNIGHT_ID) as usize * s as usize]
+        if p[(QUEEN_ID * s + ARRAY_BASE_6) as usize] + p[(ROOK_ID * s + ARRAY_BASE_6) as usize] == 0
+            && p[(BISHOP_ID * s + ARRAY_BASE_6) as usize]
+                + p[(KNIGHT_ID * s + ARRAY_BASE_6) as usize]
                 < 2
         {
             continue; // of course with only two knights it is hard, but one may try.
         }
-        let opp_king = -s * KING_ID;
+        let opp_king = -s * KING_ID + ARRAY_BASE_6;
         for i in POS_RANGE {
-            if p[(ARRAY_BASE_6 + QUEEN_ID) as usize * s as usize]
-                + p[(ARRAY_BASE_6 + ROOK_ID) as usize * s as usize]
+            if p[(QUEEN_ID * s + ARRAY_BASE_6) as usize] + p[(ROOK_ID * s + ARRAY_BASE_6) as usize]
                 == 0
-                && p[BISHOP_ID as usize * s as usize] < 2
+                && p[(BISHOP_ID * s + ARRAY_BASE_6) as usize] < 2
             {
                 // chase to selected corner
                 if odd(col(b[(s + 1) as usize] as i8) as i8) != odd(row(b[(s + 1) as usize] as i8))
@@ -2097,10 +2095,17 @@ pub fn reply(g: &mut Game) -> Move {
 
     let start_time = Instant::now(); // cpuTime();
     if setup_endgame(g) {
+        println!("endgame");
         if !g.is_endgame {
             g.is_endgame = true;
         }
     }
+
+    for i in 0..13 {
+        println!("");
+        pf(g.freedom[i]);
+    }
+
     //debugEcho(GC_getStatistics()
     for el in &mut g.tt {
         el.res.pri = i64::MIN
@@ -2130,8 +2135,8 @@ pub fn reply(g: &mut Game) -> Move {
     return result;
 }
 
-fn set_board(g: &mut Game, f: FigureID, c: Position, r: Position) {
-    g.board[c as usize + r as usize * 8] = f
+fn set_board(g: &mut Game, f: FigureID, c: usize, r: usize) {
+    g.board[c + r * 8] = f
 }
 
 fn set_board_from_string(g: &mut Game, f: FigureID, s: String) {
@@ -2227,4 +2232,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2246 lines 443 as
+// 2235 lines 422 as
