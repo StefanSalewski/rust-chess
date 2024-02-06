@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 01-FEB-2024
+// v 0.2 -- 03-FEB-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -62,7 +62,7 @@ pub struct Game {
     bishop_path: Path,
     rook_path: Path,
     king_path: Path,
-    pjm: i64,
+    pjm: i8,
 }
 
 const CORE_BIT_BUFFER_SIZE: usize = 24; // size with huffman compression
@@ -150,20 +150,20 @@ pub fn new_game() -> Game {
         pjm: -1,
     };
     g.tt.resize(TTE_SIZE, Default::default());
-    init_pawn(&mut g, COLOR_WHITE as i64);
-    init_pawn(&mut g, COLOR_BLACK as i64);
+    init_pawn(&mut g, COLOR_WHITE);
+    init_pawn(&mut g, COLOR_BLACK);
     init_bishop(&mut g);
     init_knight(&mut g);
     init_king(&mut g);
     init_rook(&mut g);
+    if false {
+        g.board = [0; 64];
 
-    //g.board = [0; 64];
-
-    //set_board(&mut g, B_KING, BC, B3);
-    //set_board(&mut g, W_KING, BA, B1);
-    //set_board(&mut g, B_BISHOP, BC, B2);
-    //set_board(&mut g, B_BISHOP, BE, B5);
-
+        set_board(&mut g, B_KING, BC, B3);
+        set_board(&mut g, W_KING, BA, B1);
+        set_board(&mut g, B_BISHOP, BC, B2);
+        set_board(&mut g, B_BISHOP, BE, B5);
+    }
     g
 }
 
@@ -302,8 +302,8 @@ const POS_RANGE: Range<i8> = 0..64;
 const POS_RANGE_US: Range<usize> = 0..64;
 
 type Color = i64;
-const COLOR_BLACK: i32 = -1;
-const COLOR_WHITE: i32 = 1;
+const COLOR_BLACK: i64 = -1;
+const COLOR_WHITE: i64 = 1;
 type ColorIndex = i8; //0 .. 1
 type Position = i8; //0 .. 63
 type Col = i8; //0 .. 7
@@ -382,7 +382,7 @@ struct HashResult {
     floor: HashLine2, // lower bounds
     kks: KKS,
     pri: i64,
-    king_pos: i64,
+    king_pos: usize,
     pop_cnt: i64,
     control: ChessSquares,
     state: State,
@@ -444,11 +444,11 @@ fn col_idx(c: Color) -> ColorIndex {
 }
 
 fn is_white(c: Color) -> bool {
-    c == COLOR_WHITE as i64
+    c == COLOR_WHITE
 }
 
 fn is_black(c: Color) -> bool {
-    c == COLOR_BLACK as i64
+    c == COLOR_BLACK
 }
 
 fn opp_color(c: Color) -> Color {
@@ -468,7 +468,7 @@ fn base_row(p: Position) -> bool {
 }
 
 fn rows_to_go(p: Position, c: Color) -> i8 {
-    if c == (COLOR_BLACK as i64) {
+    if c == (COLOR_BLACK) {
         row(p)
     } else {
         7 - row(p)
@@ -540,7 +540,6 @@ const HASH_RESULT_ALL_ZERO: HashLine1 = [Guide1 {
 
 fn init_hr(hr: &mut HashResult) {
     hr.score = HASH_RESULT_ALL_ZERO;
-    //for mut el in hr.floor {
     for el in &mut hr.floor {
         el.s = INVALID_SCORE;
     }
@@ -614,7 +613,7 @@ fn simpleWriteToBitBuffer(g: &Game, c: Color) -> BitBuffer192 {
     let mut result: BitBuffer192 = [0; 32];
     debug_assert!(std::mem::size_of_val(&result) == 32);
     let mut empty: u8 = KING_ID as u8;
-    if c == COLOR_BLACK as i64 {
+    if c == COLOR_BLACK {
         // encode the color of active player in empty squares
         empty = 15
     }
@@ -654,7 +653,7 @@ fn much_faster_write_to_bit_buffer(g: &Game, c: Color) -> BitBuffer192 {
     debug_assert!(std::mem::size_of_val(&result) == BIT_BUFFER_SIZE); // 24 byte size should be enough
 
     // for color encoding, we assume a board position (-1), which is empty for white and has a pawn for black.
-    if c == COLOR_WHITE as i64 {
+    if c == COLOR_WHITE {
         shift = 1;
     } else {
         shift = 3;
@@ -827,6 +826,14 @@ fn init_pawn(g: &mut Game, color: Color) {
             i += 1;
         }
         g.pawn_path[col_idx(color) as usize][src as usize][i as usize].pos = -1;
+    }
+
+    // only for the initial sort of the movelist
+    for p in POS_RANGE {
+        if (2..6).contains(&(row(p) as usize)) && (2..6).contains(&(col(p) as usize)) {
+            g.freedom[(ARRAY_BASE_6 + B_PAWN) as usize][p as usize] = 1;
+            g.freedom[(ARRAY_BASE_6 + W_PAWN) as usize][p as usize] = 1;
+        }
     }
 }
 
@@ -1137,16 +1144,17 @@ fn king_pos(g: &Game, c: Color) -> usize {
     0
 }
 
-const V_RATIO: i32 = 8;
+const V_RATIO: i64 = 8;
 
-const SELECT_EXTEND: bool = false; // depth extend based on source and destination pieces
+const RANGE_EXTEND: bool = false; // depth extend based on distanve of movement
+const SELECT_EXTEND: bool = true; // depth extend based on source and destination pieces
 const CAPTURE_EXTEND: bool = false; // depth extend for captures
 const EQUAL_CAPTURE_EXTEND: bool = false; // depth extend for captures of pieces with similar value
 
 const LARGE_CAPTURE_EXTEND: bool = false; // i.e. pawn captures knight
 const PAWN_MARCH_EXTEND: bool = false; // successive pawn moves of a single pawn, to gain nconversion to queen
-const CHECK_EXTEND: bool = false; // depth extend when we are in check (only supported for first 3 plys)
-const NO_EXTEND_AT_ALL: bool = true; // avoid depth entends for now
+const CHECK_EXTEND: bool = true; // depth extend when we are in check (only supported for first 3 plys)
+const NO_EXTEND_AT_ALL: bool = false; // avoid depth entends for now
 
 // for endgame, to get a correct value for "moves to mate"
 // "moves to mate" is calculated from score and value of cup counter
@@ -1199,38 +1207,39 @@ fn abeta(
     alpha_0: i64,
     beta: i64,
     old_list_len: i64,
-    ep_pos: i64,
+    ep_pos: i8,
 ) -> Move {
     debug_assert!(alpha_0 < beta);
     debug_inc(&mut g.ab_call);
     debug_assert!(MAX_DEPTH == 15);
     debug_assert!(V_RATIO == 8);
-    let depth_0 = min(max(v_depth / V_RATIO as i64, 0), MAX_DEPTH as i64) as usize; // starting at depth_0 == 0 we do only captures
+    let depth_0: usize = min(max(v_depth / V_RATIO, 0), MAX_DEPTH as i64) as usize; // starting at depth_0 == 0 we do only captures
     debug_assert!(cup >= 0);
     //debug_assert!(depth_0 >= 0);
     debug_assert!(std::mem::size_of::<KK>() == 8);
     debug_assert!(old_list_len >= 0);
     debug_assert!((-1..63).contains(&ep_pos));
     let mut hash_res: HashResult;
-    let mut sdi: [i64; 7] = [0; 7];
-    let mut ddi: [i64; 7] = [0; 7];
-    let mut nep_pos: i64;
-    let mut v_depth_inc: i64 = 0;
-    let mut eval_cnt: i64 = 0;
-    let mut alpha: i64 = alpha_0;
-    let mut valid_move_found: bool = false;
-    let back: Board;
-    //if cfg!(debug_assertions) {
+    let mut sdi: [i64; 7] = [0; 7]; // source figure depth increase
+    let mut ddi: [i64; 7] = [0; 7]; // destination figure depth increase
+    let mut nep_pos: i8;
+    let mut attacs: i64 = 0;
+    let mut v_depth_inc: i64 = 0; // conditional depth extension, e.g. for chess or captures
+    let mut eval_cnt: i64 = 0; // number of newly evaluated moves
+    let mut alpha: i64 = alpha_0; // mutable alpha
+    let mut valid_move_found: bool = false; // can we move -- no checkmate or stalemate
+    let back: Board; // backup for debugging, so we can test of all our moves undo operations are correct
+                     //if cfg!(debug_assertions) {
     back = g.board; // test board integrity
                     //}
     let mut result: Move = Default::default();
     result.state = STATE_NO_VALID_MOVE;
-    let v_depth = v_depth - V_RATIO as i64;
+    let v_depth = v_depth - V_RATIO;
     let encoded_board = encode_board(&g, color);
     let hash_pos = get_tte(g, encoded_board);
     if hash_pos >= 0 {
         hash_res = g.tt[hash_pos as usize].res.clone();
-        //debug_assert!(hash_res.kks.len() > 0);
+        // debug_assert!(hash_res.kks.len() > 0); // can be zero for checkmate or stalemate
         // we have the list of moves, and maybe the exact score, or a possible beta cutoff
         debug_inc(&mut g.hash_succ);
         for i in (depth_0..(MAX_DEPTH + 1) as usize).rev() {
@@ -1244,7 +1253,7 @@ fn abeta(
                     // or generate repeated moves.
                     result.score = pmq(hash_res.score[i].s as i64, -cup);
                     result.src = hash_res.score[i].si as i64; // these details are currently only needed for cup == 0
-                    result.dst = hash_res.score[i as usize].di as i64;
+                    result.dst = hash_res.score[i].di as i64;
                     result.promote_to = hash_res.score[i].promote_to as i64;
                     result.state = hash_res.state;
                     debug_inc(&mut g.score_hash_succ);
@@ -1256,7 +1265,6 @@ fn abeta(
             }
             if pmq(hash_res.floor[i].s as i64, -cup) >= beta {
                 // a beta cutoff
-                //println!("-->>{} {}", hash_res.floor[i].s, beta);
                 result.score = beta;
                 debug_inc(&mut g.floor_hash_succ);
                 return result;
@@ -1277,7 +1285,7 @@ fn abeta(
             abeta(
                 g,
                 color,
-                v_depth - 2 * V_RATIO as i64,
+                v_depth - 2 * V_RATIO,
                 cup,
                 alpha_0,
                 beta,
@@ -1292,7 +1300,7 @@ fn abeta(
     let mut evaluation: i64 = LOWEST_SCORE as i64;
     if depth_0 == 0 {
         // null move estimation for quiescence search
-        evaluation = plain_evaluate_board(&g) * color as i64;
+        evaluation = plain_evaluate_board(&g) * color;
         if evaluation >= beta + 64 {
             // +64 for max. difference in number of possible moves of both sides
             result.score = beta;
@@ -1310,7 +1318,7 @@ fn abeta(
             if *sf != VOID_ID {
                 hash_res.pop_cnt += 1;
             }
-            if sf * color as i64 <= 0 {
+            if sf * color <= 0 {
                 continue;
             }
             kk.si = si as i8;
@@ -1326,24 +1334,26 @@ fn abeta(
                 }
                 KING_ID => {
                     walk_king(&g, kk, &mut s);
-                    hash_res.king_pos = kk.si as i64
+                    hash_res.king_pos = kk.si as usize
                 }
                 _ => {}
             }
         }
         debug_assert!(hash_res.pop_cnt <= 32); // for regular games
-        if cup < 3 {
-            hash_res.in_check = in_check(&g, hash_res.king_pos as usize, color);
-            // this field is optional information
+        if CHECK_EXTEND {
+            if cup < 3 {
+                hash_res.in_check = in_check(&g, hash_res.king_pos, color);
+                // this field is optional information
+            }
         }
         for el in &s {
             if !is_a_pawn(el.sf) || odd(el.si - el.di) {
+                attacs += 1;
                 hash_res.control.insert(el.di as usize); // attacked positions
             }
         }
         kk.df = VOID_ID as i8; // for all 4 types of castling
-        if color == COLOR_WHITE as i64 && g.board[3] == W_KING {
-            // and 3 notin has_moved and 0 notin has_moved:
+        if color == COLOR_WHITE && g.board[3] == W_KING {
             if g.board[0] == W_ROOK && g.board[1] == VOID_ID && g.board[2] == VOID_ID {
                 kk.di = 1;
                 kk.si = 3;
@@ -1361,8 +1371,7 @@ fn abeta(
                 s.push(kk);
             }
         }
-        if color == COLOR_BLACK as i64 && g.board[59] == B_KING {
-            // and 59 notin has_moved and 56 notin has_moved:
+        if color == COLOR_BLACK && g.board[59] == B_KING {
             if g.board[56] == B_ROOK && g.board[57] == VOID_ID && g.board[58] == VOID_ID {
                 kk.di = 57;
                 kk.si = 59;
@@ -1381,17 +1390,12 @@ fn abeta(
             }
         }
         for el in &mut s {
-            debug_assert!(g.board[el.si as usize] != 0);
+            debug_assert!(g.board[el.si as usize] != VOID_ID);
             // guessed ratings of the moves
             el.eval_depth = -1; // mark as unevaluated
-                                //when compileOption("assertions"):
-            if false {
+            if cfg!(debug_assertions) {
                 if base_row(el.di) && is_a_pawn(el.sf) {
-                    //debug_assert!(el.promote_to.abs in [KNIGHT_ID, QUEEN_ID]);
-                    debug_assert!(
-                        el.promote_to.abs() == KNIGHT_ID as i8
-                            || el.promote_to.abs() == QUEEN_ID as i8
-                    );
+                    debug_assert!([QUEEN_ID as i8, KNIGHT_ID as i8].contains(&el.promote_to.abs()));
                 } else {
                     debug_assert!(el.promote_to == 0);
                 }
@@ -1409,10 +1413,10 @@ fn abeta(
         hash_res.kks = s;
         debug_assert!(hash_res.kks.len() > 0);
     }
+    let hash_res_kks_len = hash_res.kks.len() as i64 + attacs;
     if depth_0 == 0 {
-        // // more detailed null move estimation for quiescence search
-        evaluation += hash_res.kks.len() as i64 - old_list_len as i64; // we may do a more fine grained board control evaluation?
-                                                                       //when compileOption("assertions"):
+        // more detailed null move estimation for quiescence search. NOTE: Take attacs into account?
+        evaluation += hash_res_kks_len - old_list_len; // we may do a more fine grained board control evaluation?
         if cfg!(feature = "salewskiChessDebug") {
             lift(
                 &mut g.max_delta_len,
@@ -1431,30 +1435,30 @@ fn abeta(
     result.score = evaluation; // LOWEST_SCORE for depth_0 > 0
     debug_assert!(depth_0 == 0 || result.score == LOWEST_SCORE as i64);
     debug_assert!(hash_res.score[depth_0].s == INVALID_SCORE);
-    let hash_res_kks_len = hash_res.kks.len() as i64;
+    // let hash_res_kks_len = hash_res.kks.len() as i64;
     if hash_res.kks.len() == 0 {
         //println!("*****************");
     }
-    //debug_assert!(hash_res.kks.len() > 0); occurs in endgame?
+    // debug_assert!(hash_res.kks.len() > 0); occurs in endgame?
     for el in &mut hash_res.kks {
         if el.s == IGNORE_MARKER_LOW_INT16 {
             debug_assert!(false); // we actually delete invalid entries, so nothing to skip
             continue;
         }
         debug_assert!(el.s != IGNORE_MARKER_LOW_INT16);
-        debug_assert!(g.board[el.si as usize] != VOID_ID); // issue TODO
+        debug_assert!(g.board[el.si as usize] != VOID_ID);
         hash_res_kks_high += 1; // the number of up to date positions, which we have to sort later
         if depth_0 == 0 && el.df == VOID_ID as i8 {
             // skip non-captures in quiescence search
             continue;
         }
         if cup == 0 {
-            //debugEcho ":", (getMonoTime() - start_time).inNanoSeconds.float / 1e9 , " ", hash_res.kks.len
-            //if eval_cnt > 1 && Instant::now() > g.cut_time as Instant {
             if eval_cnt > 1 && g.start_time.elapsed() > g.cut_time {
-                //debugEcho "break", eval_cnt, " ", hash_res_kks_high
-                println!("cut_timeBreak{} {}", eval_cnt, hash_res_kks_high);
-                if cfg!(feature = "salewskiChessDebug") {
+                println!(
+                    "cut_time break, eval count: {}, kks high: {}",
+                    eval_cnt, hash_res_kks_high
+                );
+                if false && cfg!(feature = "salewskiChessDebug") {
                     println!("{:?}", hash_res.kks);
                 }
                 break;
@@ -1476,7 +1480,6 @@ fn abeta(
             let little_castling = is_a_kingelsf && elsieldi == 2; // castling candidates
             let big_castling = is_a_kingelsf && elsieldi == -2;
             let en_passant = is_a_pawnelsf && el.df == VOID_ID as i8 && odd(elsieldi); // move is an eP capture candidate
-
             if little_castling
                 && (g.has_moved.contains(el.si as usize)
                     || g.has_moved.contains(el.si as usize - 3))
@@ -1491,17 +1494,19 @@ fn abeta(
                 // skip them when not allowed.
                 continue;
             }
-            if en_passant && el.di != ep_pos as i8 {
+            if en_passant && el.di != ep_pos {
                 // skip en pasant move
                 continue;
             }
             // does such extents make any sense? We can do it, but we have to be careful and test.
-            //when SELECT_EXTEND:
-            if SELECT_EXTEND {
+            // we could additional scale the extent, e.g. by dividing by (cup+1) to apply early only.
+            if SELECT_EXTEND && cup < 4 {
                 if !g.is_endgame {
                     // makes no sense in endgame
-                    sdi = [0, 0, 0, 0, 0, 0, 2]; // source figure depth increase // increase depth when king is moved
-                    ddi = [0, 0, 2, 2, 2, 2, 0]; // destination figure depth increase // increase depth for capture
+                    // sdi = [0, 0, 0, 0, 0, 0, 2]; // source figure depth increase // increase depth when king is moved
+                    // ddi = [0, 0, 2, 2, 2, 2, 0]; // destination figure depth increase // increase depth for capture
+                    sdi = [0, 0, 0, 0, 0, 2, 2]; // source figure depth increase // increase depth when king or queen is moved
+                    ddi = [0, 0, 1, 1, 1, 2, 0]; // destination figure depth increase // increase depth for fat captures
                 }
             }
             if CAPTURE_EXTEND || EQUAL_CAPTURE_EXTEND || LARGE_CAPTURE_EXTEND {
@@ -1548,6 +1553,15 @@ fn abeta(
                     v_depth_inc = 2;
                 }
             }
+            if RANGE_EXTEND {
+                let mut d = max(
+                    (row(el.di) - row(el.si)).abs(),
+                    (col(el.di) - col(el.si)).abs(),
+                );
+                debug_assert!((1..8).contains(&d));
+                d = (7 - d) / 2;
+                v_depth_inc = d as i64;
+            }
             if NO_EXTEND_AT_ALL {
                 v_depth_inc = 0;
             }
@@ -1585,7 +1599,7 @@ fn abeta(
             }
             let pawn_jump = is_a_pawnelsf && (elsieldi == 16 || elsieldi == -16);
             if pawn_jump {
-                nep_pos = (el.si + el.di) as i64 / 2; // fast unsigned div
+                nep_pos = (el.si + el.di) / 2; // fast unsigned div
             } else {
                 nep_pos = -1;
             }
@@ -1698,7 +1712,7 @@ fn abeta(
         }
     }
     if depth_0 > 0 && !valid_move_found {
-        if in_check(&g, hash_res.king_pos as usize, color) {
+        if in_check(&g, hash_res.king_pos, color) {
             result.state = STATE_CHECKMATE;
             result.score = -KING_VALUE as i64 + cup as i64 - 1;
         } else {
@@ -1708,7 +1722,6 @@ fn abeta(
     } else {
         result.state = STATE_PLAYING;
     }
-
     debug_assert!(hash_res.score[depth_0].s == INVALID_SCORE);
     //debug_assert!(hash_res.kks_high == hash_res.kks.high) // not always, due to cut_time break for cup == 0
     ixsort(&mut hash_res.kks, hash_res_kks_high);
@@ -1759,14 +1772,14 @@ fn check_mate_in(score: i64) -> i64 {
     }
 }
 
-fn alphabeta(g: &mut Game, color: Color, depth: i64, ep_pos: i64) -> Move {
+fn alphabeta(g: &mut Game, color: Color, depth: i64, ep_pos: i8) -> Move {
     g.cut_time = Duration::from_millis(1_700);
     g.start_time = Instant::now();
     reset_statistics(g);
     let result = abeta(
         g,
         color,
-        depth * V_RATIO as i64 + V_RATIO as i64 / 2,
+        depth * V_RATIO + V_RATIO / 2,
         0,
         -AB_INF as i64,
         AB_INF as i64,
@@ -1802,7 +1815,7 @@ pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
         g.has_moved.insert(p0 as usize);
         g.pjm = -1;
         if is_a_pawn_at(&g, p0) && (p0 - p1).abs() == 16 {
-            g.pjm = (p0 + p1) as i64 / 2;
+            g.pjm = (p0 + p1) / 2;
         }
     }
     if (p1 - p0).abs() == 2 && is_a_king_at(&g, p0) {
@@ -1868,12 +1881,12 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
     if si == 3 || si == 3 + 7 * 8 {
         const // king, void, void, void, rook, kingDelta+2
       Q: [[usize; 6]; 2] = [[3, 2, 1, 1, 0, 0], [3, 4, 5, 6, 7, 4]];
-        let k = W_KING * color as i64;
-        let r = W_ROOK * color as i64;
+        let k = W_KING * color;
+        let r = W_ROOK * color;
         for i in 0..(1 + 1) {
             // castlings both sides
             let mut q = Q[i];
-            if color == COLOR_BLACK as i64 {
+            if color == COLOR_BLACK {
                 for j in 0..(4 + 1) {
                     q[j as usize] += 7 * 8;
                 }
@@ -1909,7 +1922,7 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
 }
 
 pub fn move_is_valid2(g: &mut Game, si: i64, di: i64) -> bool {
-    sign(g.board[si as usize]) as Color == COLOR_WHITE as i64
+    sign(g.board[si as usize]) as Color == COLOR_WHITE
         && tag(g, si)
             .iter()
             .into_iter()
@@ -2102,7 +2115,7 @@ pub fn reply(g: &mut Game) -> Move {
     }
 
     for i in 0..13 {
-        println!("");
+        println!("  ");
         pf(g.freedom[i]);
     }
 
@@ -2113,9 +2126,9 @@ pub fn reply(g: &mut Game) -> Move {
     while depth < MAX_DEPTH {
         depth += 1;
         println!("Depth:  {}", depth);
-        result = alphabeta(g, COLOR_BLACK as i64, depth as i64, g.pjm);
+        result = alphabeta(g, COLOR_BLACK, depth as i64, g.pjm);
         //debugEcho result.score
-        println!(":::{}", result.score);
+        //println!(":::{}", result.score);
         println!(
             "score: {}{}{}{}{}{}",
             result.score, "(", result.src, "-", result.dst, ")"
@@ -2232,4 +2245,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2235 lines 422 as
+// 2232 lines 396 as
