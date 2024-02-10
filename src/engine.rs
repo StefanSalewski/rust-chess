@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 03-FEB-2024
+// v 0.2 -- 10-FEB-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -28,7 +28,8 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
-fn print_variable_type<K>(_: &K) {
+#[allow(dead_code)]
+fn _print_variable_type<K>(_: &K) {
     println!("{}", std::any::type_name::<K>())
 }
 
@@ -81,7 +82,7 @@ const fn bit_buffer_size() -> usize {
 }
 
 // this syntas is also possible
-const JUST_TEST: usize = if cfg!(feature = "salewskiChessDebug") {
+const _JUST_TEST: usize = if cfg!(feature = "salewskiChessDebug") {
     2
 } else {
     7
@@ -281,21 +282,37 @@ const SETUP: [i64; 64] = [
 ];
 
 // the traditional row and column designators -- B prefix for Board
+
 const BA: usize = 7;
+#[allow(dead_code)]
 const BB: usize = 6;
+#[allow(dead_code)]
 const BC: usize = 5;
+#[allow(dead_code)]
 const BD: usize = 4;
+#[allow(dead_code)]
 const BE: usize = 3;
+#[allow(dead_code)]
 const BF: usize = 2;
+#[allow(dead_code)]
 const BG: usize = 1;
+#[allow(dead_code)]
 const BH: usize = 0;
+#[allow(dead_code)]
 const B1: usize = 0;
+#[allow(dead_code)]
 const B2: usize = 1;
+#[allow(dead_code)]
 const B3: usize = 2;
+#[allow(dead_code)]
 const B4: usize = 3;
+#[allow(dead_code)]
 const B5: usize = 4;
+#[allow(dead_code)]
 const B6: usize = 5;
+#[allow(dead_code)]
 const B7: usize = 6;
+#[allow(dead_code)]
 const B8: usize = 7;
 
 const POS_RANGE: Range<i8> = 0..64;
@@ -313,14 +330,16 @@ type FigureID = i64;
 pub type Board = [FigureID; 64];
 type Freedom = [[i64; 64]; 13]; // VOID_ID..KING_ID; Maybe we should call it happyness
 
+/*
 const WR0: i32 = 0; // initial positions of King and Rook for castling tests
 const WK3: i32 = 3;
 const WR7: i32 = 7;
 const BR56: i32 = 56;
 const BK59: i32 = 59;
 const BR63: i32 = 63;
+*/
 
-type ChessSquare = i8; // range[0 .. 63];
+// type ChessSquare = i8; // range[0 .. 63];
 type ChessSquares = BitSet; // set[ChessSquare];
 type HasMoved = BitSet; //set[ChessSquare];
 type PawnMarch = [ChessSquares; 4 + 32 + 1]; // array[-4 .. 32, ChessSquares];
@@ -415,7 +434,7 @@ fn odd(i: i8) -> bool {
     (i & 1) != 0
 }
 
-fn even(i: i8) -> bool {
+fn _even(i: i8) -> bool {
     (i & 1) == 0
 }
 
@@ -423,7 +442,7 @@ fn sign(x: i64) -> i64 {
     (x > 0) as i64 - (x < 0) as i64
 }
 
-fn same_sign(a: i64, b: i64) -> bool {
+fn _same_sign(a: i64, b: i64) -> bool {
     (a ^ b) >= 0
 }
 
@@ -447,7 +466,7 @@ fn is_white(c: Color) -> bool {
     c == COLOR_WHITE
 }
 
-fn is_black(c: Color) -> bool {
+fn _is_black(c: Color) -> bool {
     c == COLOR_BLACK
 }
 
@@ -546,6 +565,7 @@ fn init_hr(hr: &mut HashResult) {
     hr.state = STATE_PLAYING;
 }
 
+#[cfg(feature = "salewskiChessDebug")]
 static FIGURES: [&str; 13] = [
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9a]) },
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9B]) },
@@ -562,9 +582,10 @@ static FIGURES: [&str; 13] = [
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x94]) },
 ];
 
-fn p(b: Board) {
+fn p(_b: Board) {
     #[cfg(feature = "salewskiChessDebug")]
     {
+        let b = _b;
         for (i, c) in b.iter().enumerate() {
             print!("{}", FIGURES[(6 + *c) as usize]);
             if (i + 1) % 8 == 0 {
@@ -574,9 +595,10 @@ fn p(b: Board) {
     }
 }
 
-fn pf(b: Board) {
+fn pf(_b: Board) {
     #[cfg(feature = "salewskiChessDebug")]
     {
+        let b = _b;
         for (i, c) in b.iter().enumerate() {
             print!(" {} ", c);
             if (i + 1) % 8 == 0 {
@@ -598,7 +620,7 @@ fn is_a_king_at(g: &Game, p: Position) -> bool {
     sqr(g.board[p as usize]) == KING_ID * KING_ID
 }
 
-fn check(g: &Game) {
+fn _check(g: &Game) {
     let mut p: i64 = 0;
     for i in g.board {
         if i != VOID_ID {
@@ -647,7 +669,7 @@ fn much_faster_write_to_bit_buffer(g: &Game, c: Color) -> BitBuffer192 {
     let mut collector: [u8; 4 * 8] = [0; 32];
     let mut result: BitBuffer192 = [0; BIT_BUFFER_SIZE];
     let mut buf: u64 = 0;
-    let mut shift: usize = 0;
+    let mut shift: usize;
     let mut bpos: usize = 0; // bype position in collector
     let mut bp; // board position
     debug_assert!(std::mem::size_of_val(&result) == BIT_BUFFER_SIZE); // 24 byte size should be enough
@@ -882,7 +904,7 @@ fn capture(kk: KK) -> bool {
     kk.sf * kk.df < 0
 }
 
-fn valid(kk: KK) -> bool {
+fn _valid(kk: KK) -> bool {
     kk.sf * kk.df <= 0
 }
 
@@ -1400,8 +1422,8 @@ fn abeta(
                     debug_assert!(el.promote_to == 0);
                 }
             }
-            el.s = (FIGURE_VALUE[el.promote_to.abs() as usize]
-                + FIGURE_VALUE[el.df.abs() as usize]
+            el.s = (FIGURE_VALUE[el.promote_to.abs() as usize] + FIGURE_VALUE[el.df.abs() as usize]
+                - FIGURE_VALUE[el.sf.abs() as usize] / 2 * (el.df != 0) as i32
                 + g.freedom[(6 + el.sf) as usize][(0 + el.di) as usize] as i32
                 - g.freedom[(6 + el.sf) as usize][(0 + el.si) as usize] as i32)
                 as i16;
@@ -1752,7 +1774,7 @@ fn abeta(
     result
 }
 
-fn str_2_board_pos(s: String) -> Position {
+fn _str_2_board_pos(s: String) -> Position {
     debug_assert!(s.len() == 2);
     let s0 = s.as_bytes()[0] as char;
     let s0 = s0.to_ascii_lowercase();
@@ -1764,7 +1786,7 @@ fn str_2_board_pos(s: String) -> Position {
     return c + r * 8;
 }
 
-fn check_mate_in(score: i64) -> i64 {
+fn _check_mate_in(score: i64) -> i64 {
     if score > KING_VALUE_DIV_2 as i64 {
         KING_VALUE as i64 - score
     } else {
@@ -1979,7 +2001,7 @@ pub fn move_to_str(g: &Game, si: Position, di: Position, flag: i32) -> String {
     result
 }
 
-pub fn m_2_str(g: &Game, si: Position, di: Position) -> String {
+pub fn _m_2_str(g: &Game, si: Position, di: Position) -> String {
     let mut result: String;
     let mut flag: i32 = 0;
     if !is_void_at(&g, di) {
@@ -2152,7 +2174,7 @@ fn set_board(g: &mut Game, f: FigureID, c: usize, r: usize) {
     g.board[c + r * 8] = f
 }
 
-fn set_board_from_string(g: &mut Game, f: FigureID, s: String) {
+fn _set_board_from_string(g: &mut Game, f: FigureID, s: String) {
     debug_assert!(s.len() == 2);
     debug_assert!(f.abs() <= KING_ID);
     let s0 = s.as_bytes()[0].to_ascii_lowercase();
@@ -2164,7 +2186,7 @@ fn set_board_from_string(g: &mut Game, f: FigureID, s: String) {
     g.board[c as usize + r as usize * 8] = f;
 }
 
-fn print(g: &Game) {
+fn _print(g: &Game) {
     for (p, f) in g.board.iter().enumerate() {
         if p % 8 == 0 {
             println!("");
@@ -2245,4 +2267,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2232 lines 396 as
+// 2270 lines 396 as

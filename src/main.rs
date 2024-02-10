@@ -26,7 +26,7 @@ struct ChessBoard {
     p0: i32,
 }
 
-fn print_variable_type<K>(_: &K) {
+fn _print_variable_type<K>(_: &K) {
     println!("{}", std::any::type_name::<K>())
 }
 
@@ -103,8 +103,9 @@ fn idle_func(data: &fragile::Fragile<Rc<RefCell<ChessBoard>>>) {
         .press
         .block_signal(&data.get().borrow().button_handler_id.as_ref().unwrap());
     let m = engine::reply(&mut data.get().borrow_mut().game);
-    for mut i in data.get().borrow_mut().tagged {
-        i = 0
+    // for mut i in data.get().borrow_mut().tagged {
+    for i in &mut data.get().borrow_mut().tagged {
+        *i = 0
     }
     data.get().borrow_mut().tagged[63 - m.src as usize] = 2;
     data.get().borrow_mut().tagged[63 - m.dst as usize] = 2;
