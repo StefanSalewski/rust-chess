@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 10-FEB-2024
+// v 0.2 -- 21-FEB-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -330,14 +330,12 @@ type FigureID = i64;
 pub type Board = [FigureID; 64];
 type Freedom = [[i64; 64]; 13]; // VOID_ID..KING_ID; Maybe we should call it happyness
 
-/*
-const WR0: i32 = 0; // initial positions of King and Rook for castling tests
-const WK3: i32 = 3;
-const WR7: i32 = 7;
-const BR56: i32 = 56;
-const BK59: i32 = 59;
-const BR63: i32 = 63;
-*/
+const WR0: usize = 0; // initial positions of King and Rook for castling tests
+const WK3: usize = 3;
+const WR7: usize = 7;
+const BR56: usize = 56;
+const BK59: usize = 59;
+const BR63: usize = 63;
 
 // type ChessSquare = i8; // range[0 .. 63];
 type ChessSquares = BitSet; // set[ChessSquare];
@@ -835,6 +833,7 @@ fn init_king(g: &mut Game) {
 
 // the first two moves are possible captures or -1 if at the border of the board
 fn init_pawn(g: &mut Game, color: Color) {
+    const PS: [i64; 8] = [14, 9, 5, 2, 0, 0, 2, 0];
     for src in POS_RANGE {
         let mut i = 0;
         for d in PAWN_DIRS_WHITE {
@@ -849,12 +848,12 @@ fn init_pawn(g: &mut Game, color: Color) {
         }
         g.pawn_path[col_idx(color) as usize][src as usize][i as usize].pos = -1;
     }
-
-    // only for the initial sort of the movelist
+    let P = color as i64;
     for p in POS_RANGE {
+        g.freedom[(ARRAY_BASE_6 + P) as usize][p as usize] =
+            PS[rows_to_go(p as i8, color as i64) as usize];
         if (2..6).contains(&(row(p) as usize)) && (2..6).contains(&(col(p) as usize)) {
-            g.freedom[(ARRAY_BASE_6 + B_PAWN) as usize][p as usize] = 1;
-            g.freedom[(ARRAY_BASE_6 + W_PAWN) as usize][p as usize] = 1;
+            g.freedom[(ARRAY_BASE_6 + P) as usize][p as usize] += 1;
         }
     }
 }
@@ -1075,6 +1074,26 @@ fn plain_evaluate_board(g: &Game) -> i64 {
         result += (FIGURE_VALUE[f.abs() as usize] + g.freedom[(6 + *f) as usize][p as usize] as i32)
             as i64
             * (sign(*f));
+    }
+    if g.has_moved.contains(WK3) {
+        result -= 4;
+    } else {
+        if g.has_moved.contains(WR0) {
+            result -= 2;
+        }
+        if g.has_moved.contains(WR7) {
+            result -= 2;
+        }
+    }
+    if g.has_moved.contains(BK59) {
+        result += 4;
+    } else {
+        if g.has_moved.contains(BR56) {
+            result += 2;
+        }
+        if g.has_moved.contains(BR63) {
+            result += 2;
+        }
     }
     result
 }
@@ -1322,8 +1341,8 @@ fn abeta(
     let mut evaluation: i64 = LOWEST_SCORE as i64;
     if depth_0 == 0 {
         // null move estimation for quiescence search
-        evaluation = plain_evaluate_board(&g) * color;
-        if evaluation >= beta + 64 {
+        evaluation = plain_evaluate_board(&g) * color - old_list_len;
+        if evaluation >= beta {
             // +64 for max. difference in number of possible moves of both sides
             result.score = beta;
             debug_inc(&mut g.null_move_succ_1);
@@ -1438,7 +1457,7 @@ fn abeta(
     let hash_res_kks_len = hash_res.kks.len() as i64 + attacs;
     if depth_0 == 0 {
         // more detailed null move estimation for quiescence search. NOTE: Take attacs into account?
-        evaluation += hash_res_kks_len - old_list_len; // we may do a more fine grained board control evaluation?
+        evaluation += hash_res_kks_len; // we may do a more fine grained board control evaluation?
         if cfg!(feature = "salewskiChessDebug") {
             lift(
                 &mut g.max_delta_len,
@@ -2267,4 +2286,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2270 lines 396 as
+// 2289 lines 396 as
