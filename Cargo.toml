@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bit-set = "*"
+#bit-set = "*"
+#bitvec = "1"
+#num-traits = "0.2"
 fragile = "*"
 pangocairo = "*"
 gtk = { version = "0.7.3", package = "gtk4", features = ["v4_12"] }

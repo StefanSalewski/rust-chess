@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 21-FEB-2024
+// v 0.2 -- 28-FEB-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -20,7 +20,6 @@
 // #![allow(non_snake_case)]
 // #![allow(non_upper_case_globals)]
 
-use bit_set::BitSet;
 use core::ops::Range;
 use std::cmp::{max, min};
 use std::collections::hash_map::DefaultHasher;
@@ -28,15 +27,98 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
+// ###
+#[derive(Clone, Debug)]
+struct BitSet(u64);
+
+impl BitSet {
+    // Creates a new BitSet with all bits set to 0
+    // This is now redundant with the Default implementation, but kept for clarity
+    fn new() -> Self {
+        BitSet(0)
+    }
+
+    // Sets the bit at the specified index to 1
+    /*
+    fn set(&mut self, index: usize) {
+        self.0 |= 1 << index;
+    }
+    */
+
+    fn insert<T>(&mut self, index: T)
+    where
+        u64: std::ops::Shl<T, Output = u64>,
+    {
+        self.0 |= 1 << index;
+    }
+
+    // Clears the bit at the specified index (sets to 0)
+    /*
+    fn clear(&mut self, index: usize) {
+        self.0 &= !(1 << index);
+    }
+    */
+
+    fn remove<T>(&mut self, index: T)
+    where
+        u64: std::ops::Shl<T, Output = u64>,
+    {
+        self.0 &= !(1 << index);
+    }
+
+    // Checks if the bit at the specified index is set
+    /*
+    fn is_set(&self, index: usize) -> bool {
+        (self.0 & (1 << index)) != 0
+    }
+    */
+
+    fn contains<T>(&self, index: T) -> bool
+    where
+        u64: std::ops::Shl<T, Output = u64>,
+    {
+        (self.0 & (1 << index)) != 0
+    }
+
+    // Returns the union of two BitSets (bits that are set in either)
+    /*
+    fn union(&self, other: &BitSet) -> BitSet {
+        BitSet(self.0 | other.0)
+    }
+    */
+
+    // Returns the difference of two BitSets (bits set in self but not in other)
+    /*
+    fn difference(&self, other: &BitSet) -> BitSet {
+        BitSet(self.0 & !other.0)
+    }
+    */
+
+    // Checks if two BitSets are equal
+    /*
+    fn equals(&self, other: &BitSet) -> bool {
+        self.0 == other.0
+    }
+    */
+
+    // Checks if two BitSets are disjoint (no bits in common)
+    fn is_disjoint(&self, other: &BitSet) -> bool {
+        (self.0 & other.0) == 0
+    }
+}
+
+impl Default for BitSet {
+    fn default() -> Self {
+        BitSet(0)
+    }
+}
+// ###
+
 #[allow(dead_code)]
 fn _print_variable_type<K>(_: &K) {
     println!("{}", std::any::type_name::<K>())
 }
 
-// #[allow(non_camel_case_types)]
-
-// #[derive(Default)]
-// #[derive(Debug)]
 pub struct Game {
     table_put: i64, // some fields like this are only for statistics and debugging
     table_col: i64,
@@ -81,7 +163,7 @@ const fn bit_buffer_size() -> usize {
     }
 }
 
-// this syntas is also possible
+// this syntax is also possible
 const _JUST_TEST: usize = if cfg!(feature = "salewskiChessDebug") {
     2
 } else {
@@ -157,6 +239,9 @@ pub fn new_game() -> Game {
     init_knight(&mut g);
     init_king(&mut g);
     init_rook(&mut g);
+
+    //set_board(&mut g, VOID_ID, BF, B8);
+    //set_board(&mut g, VOID_ID, BG, B8);
     if false {
         g.board = [0; 64];
 
@@ -326,7 +411,6 @@ type Position = i8; //0 .. 63
 type Col = i8; //0 .. 7
 type Row = i8; //0 .. 7
 type FigureID = i64;
-//#[derive(Clone, Copy)]
 pub type Board = [FigureID; 64];
 type Freedom = [[i64; 64]; 13]; // VOID_ID..KING_ID; Maybe we should call it happyness
 
@@ -412,9 +496,6 @@ struct TTE {
     key: BitBuffer192,
 }
 
-//template `>=!`(a: var SomeNumber; b: SomeNumber) =
-//  if a < b: a = b
-
 fn lift(a: &mut i64, b: i64) {
     if *a < b {
         *a = b
@@ -423,10 +504,6 @@ fn lift(a: &mut i64, b: i64) {
 
 const TTE_SIZE: usize = 1024 * 1024 * 2; // must be a power of 2
 const TT_TRY: i32 = 5;
-
-//template umod8(i: typed): untyped = i and 7
-
-//template udiv8(i: typed): untyped = i shr 3
 
 fn odd(i: i8) -> bool {
     (i & 1) != 0
@@ -848,12 +925,12 @@ fn init_pawn(g: &mut Game, color: Color) {
         }
         g.pawn_path[col_idx(color) as usize][src as usize][i as usize].pos = -1;
     }
-    let P = color as i64;
+    let pc = color as i64;
     for p in POS_RANGE {
-        g.freedom[(ARRAY_BASE_6 + P) as usize][p as usize] =
+        g.freedom[(ARRAY_BASE_6 + pc) as usize][p as usize] =
             PS[rows_to_go(p as i8, color as i64) as usize];
         if (2..6).contains(&(row(p) as usize)) && (2..6).contains(&(col(p) as usize)) {
-            g.freedom[(ARRAY_BASE_6 + P) as usize][p as usize] += 1;
+            g.freedom[(ARRAY_BASE_6 + pc) as usize][p as usize] += 1;
         }
     }
 }
@@ -879,7 +956,6 @@ fn fast_del_invalid(a: &mut Vec<KK>) {
 // fn insertion_sort<T: std::cmp::Ord>(arr: &mut [T]) {
 // must be a stable sort!
 fn ixsort(arr: &mut Vec<KK>, highl: usize) {
-    //debug_assert!(high > 0);
     for i in 1..highl {
         let mut j = i;
         while j > 0 && arr[j].s > arr[j - 1].s {
@@ -1187,8 +1263,9 @@ fn king_pos(g: &Game, c: Color) -> usize {
 
 const V_RATIO: i64 = 8;
 
-const RANGE_EXTEND: bool = false; // depth extend based on distanve of movement
+const RANGE_EXTEND: bool = false; // depth extend based on distance of movement
 const SELECT_EXTEND: bool = true; // depth extend based on source and destination pieces
+const CASTLING_EXTEND: bool = true;
 const CAPTURE_EXTEND: bool = false; // depth extend for captures
 const EQUAL_CAPTURE_EXTEND: bool = false; // depth extend for captures of pieces with similar value
 
@@ -1265,7 +1342,7 @@ fn abeta(
     let mut ddi: [i64; 7] = [0; 7]; // destination figure depth increase
     let mut nep_pos: i8;
     let mut attacs: i64 = 0;
-    let mut v_depth_inc: i64 = 0; // conditional depth extension, e.g. for chess or captures
+    let mut v_depth_inc: i64; // conditional depth extension, e.g. for chess or captures
     let mut eval_cnt: i64 = 0; // number of newly evaluated moves
     let mut alpha: i64 = alpha_0; // mutable alpha
     let mut valid_move_found: bool = false; // can we move -- no checkmate or stalemate
@@ -1343,7 +1420,6 @@ fn abeta(
         // null move estimation for quiescence search
         evaluation = plain_evaluate_board(&g) * color - old_list_len;
         if evaluation >= beta {
-            // +64 for max. difference in number of possible moves of both sides
             result.score = beta;
             debug_inc(&mut g.null_move_succ_1);
             return result;
@@ -1382,7 +1458,7 @@ fn abeta(
         }
         debug_assert!(hash_res.pop_cnt <= 32); // for regular games
         if CHECK_EXTEND {
-            if cup < 3 {
+            if cup < 4 {
                 hash_res.in_check = in_check(&g, hash_res.king_pos, color);
                 // this field is optional information
             }
@@ -1390,7 +1466,7 @@ fn abeta(
         for el in &s {
             if !is_a_pawn(el.sf) || odd(el.si - el.di) {
                 attacs += 1;
-                hash_res.control.insert(el.di as usize); // attacked positions
+                hash_res.control.insert(el.di); // attacked positions
             }
         }
         kk.df = VOID_ID as i8; // for all 4 types of castling
@@ -1521,17 +1597,11 @@ fn abeta(
             let little_castling = is_a_kingelsf && elsieldi == 2; // castling candidates
             let big_castling = is_a_kingelsf && elsieldi == -2;
             let en_passant = is_a_pawnelsf && el.df == VOID_ID as i8 && odd(elsieldi); // move is an eP capture candidate
-            if little_castling
-                && (g.has_moved.contains(el.si as usize)
-                    || g.has_moved.contains(el.si as usize - 3))
-            {
+            if little_castling && (g.has_moved.contains(el.si) || g.has_moved.contains(el.si - 3)) {
                 // we always generate castling moves but
                 continue;
             }
-            if big_castling
-                && (g.has_moved.contains(el.si as usize)
-                    || g.has_moved.contains(el.si as usize + 4))
-            {
+            if big_castling && (g.has_moved.contains(el.si) || g.has_moved.contains(el.si + 4)) {
                 // skip them when not allowed.
                 continue;
             }
@@ -1541,7 +1611,8 @@ fn abeta(
             }
             // does such extents make any sense? We can do it, but we have to be careful and test.
             // we could additional scale the extent, e.g. by dividing by (cup+1) to apply early only.
-            if SELECT_EXTEND && cup < 4 {
+            if SELECT_EXTEND {
+                // && cup < 104 {
                 if !g.is_endgame {
                     // makes no sense in endgame
                     // sdi = [0, 0, 0, 0, 0, 0, 2]; // source figure depth increase // increase depth when king is moved
@@ -1550,6 +1621,7 @@ fn abeta(
                     ddi = [0, 0, 1, 1, 1, 2, 0]; // destination figure depth increase // increase depth for fat captures
                 }
             }
+            v_depth_inc = 0; // default
             if CAPTURE_EXTEND || EQUAL_CAPTURE_EXTEND || LARGE_CAPTURE_EXTEND {
                 if el.df != VOID_ID as i8 {
                     if CAPTURE_EXTEND {
@@ -1574,8 +1646,8 @@ fn abeta(
             if PAWN_MARCH_EXTEND {
                 if is_a_pawnelsf && hash_res.pop_cnt < 32 - 6 {
                     let rows_to_go = rows_to_go(el.si, color);
-                    g.pawn_march[cup as usize].insert(el.di as usize);
-                    if g.pawn_march[cup as usize - 2].contains(el.si as usize) {
+                    g.pawn_march[cup as usize].insert(el.di);
+                    if g.pawn_march[cup as usize - 2].contains(el.si) {
                         // pawn just moved to this location
                         debug_assert!(rows_to_go < 7);
                         if rows_to_go == 6 && (elsieldi == 8 || elsieldi == -8) {
@@ -1622,17 +1694,23 @@ fn abeta(
             g.board[el.si as usize] = VOID_ID; // the basic movement
             g.board[el.di as usize] = el.sf as i64;
             let hmback = g.has_moved.clone(); // backup
-            g.has_moved.insert(el.si as usize); // may be a king or rook move, so castling is forbidden
+            g.has_moved.insert(el.si); // may be a king or rook move, so castling is forbidden
             if little_castling {
                 // small rochade
+                if CASTLING_EXTEND {
+                    v_depth_inc = 4;
+                }
                 g.board[el.di as usize + 1] = g.board[el.di as usize - 1];
                 g.board[el.di as usize - 1] = VOID_ID;
-                g.has_moved.insert(el.di as usize - 1);
+                g.has_moved.insert(el.di - 1);
             } else if big_castling {
                 // big rochade
+                if CASTLING_EXTEND {
+                    v_depth_inc = 4;
+                }
                 g.board[el.di as usize - 1] = g.board[el.di as usize + 2];
                 g.board[el.di as usize + 2] = VOID_ID;
-                g.has_moved.insert(el.di as usize + 2);
+                g.has_moved.insert(el.di + 2);
             } else if en_passant {
                 g.board[el.di as usize - color as usize * 8] = VOID_ID;
             } else if is_a_pawnelsf && base_row(el.di) {
@@ -1683,8 +1761,8 @@ fn abeta(
             }
             m.score *= -1;
             if cfg!(feature = "salewskiChessDebug") {
-                if cup == 0 {
-                    println!("********{}", m.score);
+                if cup == 0 && el.sf == B_KING as i8 {
+                    println!("********{} {} {}", m.score, el.si, el.di);
                 }
             }
             if m.state == STATE_CAN_CAPTURE_KING {
@@ -1700,7 +1778,7 @@ fn abeta(
                 }
             }
             g.has_moved = hmback; // reset board state
-            g.pawn_march[cup as usize].remove(el.di as usize);
+            g.pawn_march[cup as usize].remove(el.di);
             g.board[el.di as usize] = el.df as i64;
             g.board[el.si as usize] = el.sf as i64;
             if en_passant {
@@ -1712,9 +1790,9 @@ fn abeta(
                 g.board[el.di as usize + 1] = VOID_ID;
                 // g.has_moved.excl(el.di - 1) // use backup instead
                 let mut h: BitSet = Default::default();
-                h.insert(el.si as usize);
-                h.insert(el.si as usize - 1);
-                h.insert(el.di as usize);
+                h.insert(el.si);
+                h.insert(el.si - 1);
+                h.insert(el.di);
                 if !m.control.is_disjoint(&h) {
                     el.s = IGNORE_MARKER_LOW_INT16; // mark for deletion or ignore
                     continue; // was illegal, so ignore
@@ -1725,9 +1803,9 @@ fn abeta(
                 g.board[el.di as usize - 1] = VOID_ID;
                 // g.has_moved.excl(el.di + 2)
                 let mut h: BitSet = Default::default();
-                h.insert(el.si as usize);
-                h.insert(el.si as usize + 1);
-                h.insert(el.di as usize);
+                h.insert(el.si);
+                h.insert(el.si + 1);
+                h.insert(el.di);
                 if !m.control.is_disjoint(&h) {
                     el.s = IGNORE_MARKER_LOW_INT16;
                     continue; // was illegal, so ignore
@@ -1837,9 +1915,6 @@ fn alphabeta(g: &mut Game, color: Color, depth: i64, ep_pos: i8) -> Move {
     result
 }
 
-//type Flag* {.pure.} = enum
-//  plain, capture, ep, promotion, procap
-
 const FLAG_PLAIN: i32 = 0;
 const FLAG_CAPTURE: i32 = 1;
 const FLAG_EP: i32 = 2;
@@ -1893,7 +1968,6 @@ pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
         if !silent {
             g.debug_list.push(move_to_str(&g, p0, p1, result));
             println!("--");
-            //for el in debug_list: echo el
         }
     }
     p(g.board);
@@ -2286,4 +2360,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2289 lines 396 as
+// 2363 lines 390 as
