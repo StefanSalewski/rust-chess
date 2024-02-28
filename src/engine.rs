@@ -246,7 +246,7 @@ pub fn new_game() -> Game {
         g.board = [0; 64];
 
         set_board(&mut g, B_KING, BC, B3);
-        set_board(&mut g, W_KING, BA, B1);
+        set_board(&mut g, W_KING, BD, B6);
         set_board(&mut g, B_BISHOP, BC, B2);
         set_board(&mut g, B_BISHOP, BE, B5);
     }
@@ -367,7 +367,7 @@ const SETUP: [i64; 64] = [
 ];
 
 // the traditional row and column designators -- B prefix for Board
-
+#[allow(dead_code)]
 const BA: usize = 7;
 #[allow(dead_code)]
 const BB: usize = 6;
@@ -680,6 +680,7 @@ fn pf(_b: Board) {
                 println!("")
             }
         }
+        println!("");
     }
 }
 
@@ -1272,6 +1273,7 @@ const EQUAL_CAPTURE_EXTEND: bool = false; // depth extend for captures of pieces
 const LARGE_CAPTURE_EXTEND: bool = false; // i.e. pawn captures knight
 const PAWN_MARCH_EXTEND: bool = false; // successive pawn moves of a single pawn, to gain nconversion to queen
 const CHECK_EXTEND: bool = true; // depth extend when we are in check (only supported for first 3 plys)
+const PROMOTE_EXTEND: bool = true; // pawn promotion
 const NO_EXTEND_AT_ALL: bool = false; // avoid depth entends for now
 
 // for endgame, to get a correct value for "moves to mate"
@@ -1556,6 +1558,11 @@ fn abeta(
     if hash_res.kks.len() == 0 {
         //println!("*****************");
     }
+    if SELECT_EXTEND && !g.is_endgame {
+        // makes no sense in endgame
+        sdi = [0, 0, 0, 0, 0, 2, 2]; // source figure depth increase // increase depth when king or queen is moved
+        ddi = [0, 0, 1, 1, 1, 2, 0]; // destination figure depth increase // increase depth for fat captures
+    }
     // debug_assert!(hash_res.kks.len() > 0); occurs in endgame?
     for el in &mut hash_res.kks {
         if el.s == IGNORE_MARKER_LOW_INT16 {
@@ -1611,16 +1618,6 @@ fn abeta(
             }
             // does such extents make any sense? We can do it, but we have to be careful and test.
             // we could additional scale the extent, e.g. by dividing by (cup+1) to apply early only.
-            if SELECT_EXTEND {
-                // && cup < 104 {
-                if !g.is_endgame {
-                    // makes no sense in endgame
-                    // sdi = [0, 0, 0, 0, 0, 0, 2]; // source figure depth increase // increase depth when king is moved
-                    // ddi = [0, 0, 2, 2, 2, 2, 0]; // destination figure depth increase // increase depth for capture
-                    sdi = [0, 0, 0, 0, 0, 2, 2]; // source figure depth increase // increase depth when king or queen is moved
-                    ddi = [0, 0, 1, 1, 1, 2, 0]; // destination figure depth increase // increase depth for fat captures
-                }
-            }
             v_depth_inc = 0; // default
             if CAPTURE_EXTEND || EQUAL_CAPTURE_EXTEND || LARGE_CAPTURE_EXTEND {
                 if el.df != VOID_ID as i8 {
@@ -1666,6 +1663,9 @@ fn abeta(
                     v_depth_inc = 2;
                 }
             }
+            if PROMOTE_EXTEND && el.promote_to.abs() != VOID_ID as i8 {
+                v_depth_inc = 4;
+            }
             if RANGE_EXTEND {
                 let mut d = max(
                     (row(el.di) - row(el.si)).abs(),
@@ -1674,13 +1674,6 @@ fn abeta(
                 debug_assert!((1..8).contains(&d));
                 d = (7 - d) / 2;
                 v_depth_inc = d as i64;
-            }
-            if NO_EXTEND_AT_ALL {
-                v_depth_inc = 0;
-            }
-            if g.is_endgame {
-                // better no extents in endgame
-                v_depth_inc = 0;
             }
             if is_a_king(el.df) {
                 result.state = STATE_CAN_CAPTURE_KING; // the other result fields are not really used/needed
@@ -1721,6 +1714,10 @@ fn abeta(
                 nep_pos = (el.si + el.di) / 2; // fast unsigned div
             } else {
                 nep_pos = -1;
+            }
+            if NO_EXTEND_AT_ALL || depth_0 == 0 || g.is_endgame {
+                // better no extents in endgame
+                v_depth_inc = 0;
             }
             // if is_a_pawnelsf or el.df != VOID_ID: // handle draw by repetitions. As rep. test is a bit expensive, we do not
             if cup > 5 || hash_res.pop_cnt > 20 || is_a_pawnelsf || el.df != VOID_ID as i8 {
@@ -2230,7 +2227,7 @@ pub fn reply(g: &mut Game) -> Move {
     }
 
     for i in 0..13 {
-        println!("  ");
+        //println!("  ");
         pf(g.freedom[i]);
     }
 
@@ -2360,4 +2357,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2363 lines 390 as
+// 2359 lines 390 as
