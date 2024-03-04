@@ -7,6 +7,6 @@ is still necessary.
 ```
 git clone https://github.com/stefansalewski/rust-chess.git
 cd rust-chess
-cargo run
+cargo run --release
 ```
 

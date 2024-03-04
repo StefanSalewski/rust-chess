@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 28-FEB-2024
+// v 0.2 -- 04-MAR-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -122,6 +122,7 @@ fn _print_variable_type<K>(_: &K) {
 pub struct Game {
     table_put: i64, // some fields like this are only for statistics and debugging
     table_col: i64,
+    max_cup: i64,
     ab_call: i64,
     score_hash_succ: i64,
     floor_hash_succ: i64,
@@ -172,6 +173,7 @@ const _JUST_TEST: usize = if cfg!(feature = "salewskiChessDebug") {
 
 pub fn new_game() -> Game {
     // default options
+    //println!("{:?}", FIGURES);
     if cfg!(debug_assertions) {
         println!("compiled in debug mode");
     }
@@ -192,6 +194,7 @@ pub fn new_game() -> Game {
     let mut g = Game {
         table_put: 0,
         table_col: 0,
+        max_cup: 0,
         ab_call: 0,
         score_hash_succ: 0,
         floor_hash_succ: 0,
@@ -256,6 +259,7 @@ pub fn new_game() -> Game {
 fn reset_statistics(g: &mut Game) {
     g.table_put = 0;
     g.table_col = 0;
+    g.max_cup = 0;
     g.ab_call = 0;
     g.score_hash_succ = 0;
     g.floor_hash_succ = 0;
@@ -270,6 +274,7 @@ fn write_statistics(g: &Game) {
     println!("ab_call: {}", g.ab_call);
     println!("score_hash_succ: {}", g.score_hash_succ);
     println!("floor_hash_succ: {}", g.floor_hash_succ);
+    println!("max_cup: {}", g.max_cup);
     println!("hash_succ: {}", g.hash_succ);
     println!("table_put: {}", g.table_put);
     println!("table_col: {}", g.table_col);
@@ -642,6 +647,10 @@ fn init_hr(hr: &mut HashResult) {
 
 #[cfg(feature = "salewskiChessDebug")]
 static FIGURES: [&str; 13] = [
+    "♚", "♛", "♜", "♝", "♞", "♟", " ", "♙", "♘", "♗", "♖", "♕", "♔",
+];
+/*
+static FIGURES: [&str; 13] = [
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9a]) },
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9B]) },
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x9C]) },
@@ -656,6 +665,7 @@ static FIGURES: [&str; 13] = [
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x95]) },
     unsafe { std::str::from_utf8_unchecked(&[0xe2, 0x99, 0x94]) },
 ];
+*/
 
 fn p(_b: Board) {
     #[cfg(feature = "salewskiChessDebug")]
@@ -911,7 +921,9 @@ fn init_king(g: &mut Game) {
 
 // the first two moves are possible captures or -1 if at the border of the board
 fn init_pawn(g: &mut Game, color: Color) {
-    const PS: [i64; 8] = [14, 9, 5, 2, 0, 0, 2, 0];
+    // const PS: [i64; 8] = [14, 9, 5, 2, 0, 0, 2, 0];
+    // echo "2 1 1 1 2 4"
+    const PS: [i64; 8] = [8, 4, 2, 0, 0, 0, 1, 0]; // +1 for pawn at start row, and promote pressure gain
     for src in POS_RANGE {
         let mut i = 0;
         for d in PAWN_DIRS_WHITE {
@@ -930,9 +942,14 @@ fn init_pawn(g: &mut Game, color: Color) {
     for p in POS_RANGE {
         g.freedom[(ARRAY_BASE_6 + pc) as usize][p as usize] =
             PS[rows_to_go(p as i8, color as i64) as usize];
-        if (2..6).contains(&(row(p) as usize)) && (2..6).contains(&(col(p) as usize)) {
-            g.freedom[(ARRAY_BASE_6 + pc) as usize][p as usize] += 1;
-        }
+    }
+    // fixate outer pawns on start_row, mostly for initial move ordering
+    let pawn_row = if color == COLOR_WHITE { B2 } else { B7 };
+    for col in [BA, BB, BG, BH] {
+        g.freedom[(ARRAY_BASE_6 + pc) as usize][board_pos(col, pawn_row)] = 2; // fixed, try last
+    }
+    for col in [BD, BE] {
+        g.freedom[(ARRAY_BASE_6 + pc) as usize][board_pos(col, pawn_row)] = 0; // try first
     }
 }
 
@@ -1334,6 +1351,9 @@ fn abeta(
     debug_assert!(MAX_DEPTH == 15);
     debug_assert!(V_RATIO == 8);
     let depth_0: usize = min(max(v_depth / V_RATIO, 0), MAX_DEPTH as i64) as usize; // starting at depth_0 == 0 we do only captures
+    if depth_0 > 0 {
+        lift(&mut g.max_cup, cup);
+    }
     debug_assert!(cup >= 0);
     //debug_assert!(depth_0 >= 0);
     debug_assert!(std::mem::size_of::<KK>() == 8);
@@ -1904,7 +1924,7 @@ fn alphabeta(g: &mut Game, color: Color, depth: i64, ep_pos: i8) -> Move {
     );
     //when defined(salewskiChessDebug):
     if true {
-        if cfg!(feature = "salewskiChessDebug") {
+        if false || cfg!(feature = "salewskiChessDebug") {
             write_statistics(&g);
         }
         //echo result
@@ -2260,6 +2280,10 @@ pub fn reply(g: &mut Game) -> Move {
     return result;
 }
 
+fn board_pos(col: usize, row: usize) -> usize {
+    col + row * 8
+}
+
 fn set_board(g: &mut Game, f: FigureID, c: usize, r: usize) {
     g.board[c + r * 8] = f
 }
@@ -2357,4 +2381,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2359 lines 390 as
+// 2384 lines 390 as
