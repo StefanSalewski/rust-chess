@@ -9,9 +9,10 @@ edition = "2021"
 #bit-set = "*"
 #bitvec = "1"
 #num-traits = "0.2"
+rand = "*"
 fragile = "*"
 pangocairo = "*"
-gtk = { version = "0.7.3", package = "gtk4", features = ["v4_12"] }
+gtk = { version = "0.8.1", package = "gtk4" }
 
 [features]
 
@@ -25,4 +26,3 @@ strip = "debuginfo"
 
 [build]
 rustflags = ["-C", "target-cpu=native"]
-

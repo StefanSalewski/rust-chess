@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 04-MAR-2024
+// v 0.2 -- 12-APR-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -247,11 +247,47 @@ pub fn new_game() -> Game {
     //set_board(&mut g, VOID_ID, BG, B8);
     if false {
         g.board = [0; 64];
-
         set_board(&mut g, B_KING, BC, B3);
         set_board(&mut g, W_KING, BD, B6);
         set_board(&mut g, B_BISHOP, BC, B2);
         set_board(&mut g, B_BISHOP, BE, B5);
+    }
+
+    if false {
+        g.board = [0; 64];
+        //set_board(&mut g, B_KING, BE, B8);
+        //set_board(&mut g, W_KING, BE, B1);
+        //set_board(&mut g, B_PAWN, BE, B7);
+        //set_board(&mut g, W_PAWN, BD, B4);
+
+        set_board(&mut g, W_ROOK, BA, B1);
+        set_board(&mut g, W_ROOK, BH, B1);
+        set_board(&mut g, W_BISHOP, BB, B2);
+        set_board(&mut g, W_QUEEN, BC, B2);
+        set_board(&mut g, W_KING, BD, B2);
+        set_board(&mut g, W_PAWN, BF, B2);
+        set_board(&mut g, W_PAWN, BG, B2);
+        set_board(&mut g, W_PAWN, BH, B2);
+        set_board(&mut g, W_PAWN, BA, B3);
+        set_board(&mut g, W_BISHOP, BD, B3);
+        set_board(&mut g, W_PAWN, BE, B3);
+        set_board(&mut g, W_KNIGHT, BF, B3);
+        set_board(&mut g, B_PAWN, BG, B4);
+        set_board(&mut g, W_PAWN, BC, B5);
+        set_board(&mut g, W_PAWN, BD, B5); // !!!
+        set_board(&mut g, B_PAWN, BE, B5); // !!!
+        set_board(&mut g, B_PAWN, BF, B5);
+        set_board(&mut g, B_KNIGHT, BC, B6);
+        set_board(&mut g, B_QUEEN, BF, B6);
+        set_board(&mut g, B_ROOK, BG, B6);
+        set_board(&mut g, B_PAWN, BA, B7);
+        set_board(&mut g, B_PAWN, BB, B7);
+        set_board(&mut g, B_PAWN, BC, B7);
+        set_board(&mut g, B_PAWN, BH, B7);
+        set_board(&mut g, B_ROOK, BA, B8);
+        set_board(&mut g, B_BISHOP, BC, B8);
+        set_board(&mut g, B_KING, BE, B8);
+        set_board(&mut g, B_BISHOP, BF, B8);
     }
     g
 }
@@ -834,7 +870,10 @@ fn init_rook(g: &mut Game) {
                 if !move_is_valid(pos, dst) {
                     break;
                 }
-                g.rook_path[src as usize][i].pos = if pos == src { -dst as i8 } else { dst as i8 }; // mark start pos for this dir
+                g.rook_path[src as usize][i].pos = dst as i8;
+                if pos == src {
+                    g.rook_path[src as usize][i].nxt_dir_idx = -1; // temporary marker; default content is zero.
+                }
                 i += 1;
                 pos = dst;
             }
@@ -843,10 +882,10 @@ fn init_rook(g: &mut Game) {
         g.rook_path[src as usize][i].pos = -1; // terminator
         while i > 0 {
             i -= 1;
+            let h = g.rook_path[src as usize][i].nxt_dir_idx == -1;
             g.rook_path[src as usize][i].nxt_dir_idx = nxt_dir_start as i64;
-            if g.rook_path[src as usize][i].pos < 0 {
+            if h {
                 nxt_dir_start = i;
-                g.rook_path[src as usize][i].pos *= -1;
             }
         }
     }
@@ -862,8 +901,10 @@ fn init_bishop(g: &mut Game) {
                 if !move_is_valid(pos, dst) {
                     break;
                 }
-                g.bishop_path[src as usize][i].pos =
-                    if pos == src { -dst as i8 } else { dst as i8 };
+                g.bishop_path[src as usize][i].pos = dst as i8;
+                if pos == src {
+                    g.bishop_path[src as usize][i].nxt_dir_idx = -1; // temporary marker; default content is zero.
+                }
                 i += 1;
                 pos = dst;
             }
@@ -876,10 +917,10 @@ fn init_bishop(g: &mut Game) {
         g.freedom[(ARRAY_BASE_6 + B_QUEEN) as usize][src as usize] = ((i as i32 - 10) * 4) as i64;
         while i > 0 {
             i -= 1;
+            let h = g.bishop_path[src as usize][i].nxt_dir_idx == -1;
             g.bishop_path[src as usize][i].nxt_dir_idx = nxt_dir_start as i64;
-            if g.bishop_path[src as usize][i].pos < 0 {
+            if h {
                 nxt_dir_start = i;
-                g.bishop_path[src as usize][i].pos *= -1;
             }
         }
     }
@@ -1087,7 +1128,7 @@ fn walk_knight(g: &Game, kk: KK, s: &mut KKS) {
 }
 
 // now we generate all possible ep captures -- before performing the actual move, we have to check ep_pos value
-fn walk_pawn(g: &Game, kk: KK, s: &mut KKS) {
+fn walk_pawn(g: &Game, kk: KK, s: &mut KKS, gen_always_ep: bool) {
     let mut kk = kk;
     let col_idx = (kk.sf + 1) / 2;
     for i in 0..2 {
@@ -1105,8 +1146,9 @@ fn walk_pawn(g: &Game, kk: KK, s: &mut KKS) {
             };
             debug_assert!(c == (kk.sf) as Color);
             if rows_to_go(kk.si, c) == 3
+                && (gen_always_ep || kk.di == g.pjm)
                 && kk.df == VOID_ID as i8
-                && g.board[(kk.di + kk.sf * 8) as usize] == -kk.sf as i64
+                && g.board[(kk.di - kk.sf * 8) as usize] == -kk.sf as i64
             {
                 // possible ep capture
                 s.push(kk);
@@ -1252,7 +1294,7 @@ fn in_check(g: &Game, si: usize, col: Color) -> bool {
         return true;
     }
     s.clear();
-    walk_pawn(g, kk, &mut s);
+    walk_pawn(g, kk, &mut s, false);
     if s.iter()
         .into_iter()
         .find(|&it| it.df.abs() == PAWN_ID as i8)
@@ -1463,7 +1505,7 @@ fn abeta(
             kk.si = si as i8;
             kk.sf = *sf as i8;
             match sf.abs() {
-                PAWN_ID => walk_pawn(&g, kk, &mut s),
+                PAWN_ID => walk_pawn(&g, kk, &mut s, true),
                 KNIGHT_ID => walk_knight(&g, kk, &mut s),
                 BISHOP_ID => walk_bishop(&g, kk, &mut s),
                 ROOK_ID => walk_rook(&g, kk, &mut s),
@@ -1725,7 +1767,8 @@ fn abeta(
                 g.board[el.di as usize + 2] = VOID_ID;
                 g.has_moved.insert(el.di + 2);
             } else if en_passant {
-                g.board[el.di as usize - color as usize * 8] = VOID_ID;
+                //g.board[el.di as usize - color as usize * 8] = VOID_ID;
+                g.board[(el.di as i64 - color * 8) as usize] = VOID_ID;
             } else if is_a_pawnelsf && base_row(el.di) {
                 g.board[el.di as usize] = el.promote_to as i64;
             }
@@ -1799,7 +1842,7 @@ fn abeta(
             g.board[el.di as usize] = el.df as i64;
             g.board[el.si as usize] = el.sf as i64;
             if en_passant {
-                g.board[el.di as usize - color as usize * 8] = -el.sf as i64;
+                g.board[(el.di as i64 - color * 8) as usize] = -el.sf as i64;
             }
             if little_castling {
                 // small rochade
@@ -1999,7 +2042,7 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
     kk.s = 1; // generate all moves, not only captures
     let mut s: Vec<KK> = Vec::with_capacity(32);
     match kk.sf.abs() as i64 {
-        PAWN_ID => walk_pawn(&g, kk, &mut s),
+        PAWN_ID => walk_pawn(&g, kk, &mut s, false),
         KNIGHT_ID => walk_knight(&g, kk, &mut s),
         BISHOP_ID => walk_bishop(&g, kk, &mut s),
         ROOK_ID => walk_rook(&g, kk, &mut s),
@@ -2381,4 +2424,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2384 lines 390 as
+// 2427 lines 389 as

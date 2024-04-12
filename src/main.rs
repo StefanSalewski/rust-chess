@@ -1,5 +1,5 @@
 // Plain GTK4 frontend for the tiny Salewski chess engine
-// v 0.2 -- 14-JAN-2024
+// v 0.2 -- 12-APR-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 
@@ -7,6 +7,7 @@ use gtk::gdk;
 use gtk::glib::SignalHandlerId;
 use gtk::prelude::*;
 use gtk::{gio, Application, ApplicationWindow, DrawingArea, GestureClick};
+//use pangocairo::functions::create_layout;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -76,7 +77,7 @@ fn on_draw_event(
         );
         let _ = cr.fill();
     }
-    let layout: gtk::pango::Layout = pangocairo::create_layout(cr);
+    let layout: gtk::pango::Layout = pangocairo::functions::create_layout(cr);
     let mut desc: gtk::pango::FontDescription = gtk::pango::FontDescription::from_string(FONT);
     desc.set_absolute_size((core::cmp::min(width, height) / 8 * gtk::pango::SCALE) as f64);
     layout.set_font_description(Some(&desc));
@@ -87,13 +88,13 @@ fn on_draw_event(
             cr.set_source_rgba(0.0, 0.0, 0.0, 1.0);
         }
         layout.set_text(FIGURES[(*f + 6) as usize]);
-        pangocairo::update_layout(&cr, &layout);
+        pangocairo::functions::update_layout(&cr, &layout);
         let (w, h) = layout.size();
         cr.move_to(
             ((i % 8) as i32 * w8 + w8 / 2 - w / 2 / gtk::pango::SCALE) as f64,
             ((i / 8) as i32 * h8 + h8 / 2 - h / 2 / gtk::pango::SCALE) as f64,
         );
-        pangocairo::show_layout(&cr, &layout);
+        pangocairo::functions::show_layout(&cr, &layout);
     }
 }
 
@@ -265,4 +266,4 @@ fn main() {
     app.connect_activate(activate);
     app.run();
 }
-// 267 lines
+// 269 lines
