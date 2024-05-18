@@ -1,5 +1,5 @@
 // Plain GTK4 frontend for the tiny Salewski chess engine
-// v 0.2 -- 12-APR-2024
+// v 0.2 -- 11-MAI-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 
@@ -159,6 +159,11 @@ fn pressed(
     yf: f64,
     data: &Rc<RefCell<ChessBoard>>,
 ) {
+    //println!("{}", _n_press);
+    if _n_press == 2 {
+        engine::quit_game(&data.borrow().game);
+    }
+
     let data_clone = fragile::Fragile::new(data.clone());
     //let _window: gtk::Root = data.borrow().darea.root().unwrap();
     let parent_window = data

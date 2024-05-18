@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 06-MAI-2024
+// v 0.2 -- 18-MAI-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -153,6 +153,13 @@ pub struct Game {
     pjm: i8,
 }
 
+pub fn quit_game(g: &Game) {
+    println!("");
+    for el in &g.debug_list {
+        println!("{}", el);
+    }
+}
+
 const CORE_BIT_BUFFER_SIZE: usize = 24; // size with huffman compression
 const HASH_BIT_BUFFER_SIZE: usize = 32; // plus 8 bytes for hash when debugging
 const BIT_BUFFER_SIZE: usize = bit_buffer_size();
@@ -295,6 +302,31 @@ pub fn new_game() -> Game {
         set_board(&mut g, B_KING, BE, B8);
         set_board(&mut g, B_BISHOP, BF, B8);
     }
+
+    if false {
+        set_board(&mut g, VOID_ID, BF, B1);
+        set_board(&mut g, VOID_ID, BH, B1);
+        set_board(&mut g, VOID_ID, BC, B2);
+        set_board(&mut g, VOID_ID, BD, B2);
+        set_board(&mut g, VOID_ID, BE, B2);
+        set_board(&mut g, VOID_ID, BG, B2);
+        set_board(&mut g, W_PAWN, BC, B2); // ***
+        set_board(&mut g, W_BISHOP, BD, B3);
+        set_board(&mut g, W_KNIGHT, BF, B3);
+        set_board(&mut g, W_PAWN, BD, B4);
+        set_board(&mut g, W_PAWN, BE, B5);
+        set_board(&mut g, W_ROOK, BG, B3);
+        set_board(&mut g, VOID_ID, BG, B1);
+
+        set_board(&mut g, VOID_ID, BB, B8);
+        set_board(&mut g, VOID_ID, BD, B8);
+        set_board(&mut g, VOID_ID, BG, B8);
+        set_board(&mut g, VOID_ID, BE, B7);
+        set_board(&mut g, B_KNIGHT, BC, B6);
+        set_board(&mut g, B_PAWN, BE, B6);
+        set_board(&mut g, B_KNIGHT, BH, B6);
+        set_board(&mut g, B_QUEEN, BH, B3); // ***
+    }
     g
 }
 
@@ -386,18 +418,18 @@ const KING_DIRS: [i32; 8] = [N, O, S, W, NO, SO, NW, SW]; // KING_DIRS = BISHOP_
 //Agility = [0, 4, 6, 5, 3, 2, 1] // Pawn .. King, how often is that piece used in smart average game play.
 
 // we try to keep all the values small to fit in two bytes
-const AB_INF: i32 = 32000; // more than the summed value of all pieces
-const VOID_VALUE: i32 = 0;
-const PAWN_VALUE: i32 = 100;
-const KNIGHT_VALUE: i32 = 300;
-const BISHOP_VALUE: i32 = 300;
-const ROOK_VALUE: i32 = 500;
-const QUEEN_VALUE: i32 = 900;
-pub const KING_VALUE: i32 = 18000; // more than the summed value of all other pieces
-pub const KING_VALUE_DIV_2: i32 = KING_VALUE / 2;
-pub const SURE_CHECKMATE: i32 = KING_VALUE / 2; // still more than the summed value of all other pieces, but less than value of a king
+const AB_INF: i16 = 32000; // more than the summed value of all pieces
+const VOID_VALUE: i16 = 0;
+const PAWN_VALUE: i16 = 100;
+const KNIGHT_VALUE: i16 = 300;
+const BISHOP_VALUE: i16 = 300;
+const ROOK_VALUE: i16 = 500;
+const QUEEN_VALUE: i16 = 900;
+pub const KING_VALUE: i16 = 18000; // more than the summed value of all other pieces
+pub const KING_VALUE_DIV_2: i16 = KING_VALUE / 2;
+pub const SURE_CHECKMATE: i16 = KING_VALUE / 2; // still more than the summed value of all other pieces, but less than value of a king
 
-const FIGURE_VALUE: [i32; KING_ID as usize + 1] = [
+const FIGURE_VALUE: [i16; KING_ID as usize + 1] = [
     VOID_VALUE,
     PAWN_VALUE,
     KNIGHT_VALUE,
@@ -460,7 +492,7 @@ type Col = i8; //0 .. 7
 type Row = i8; //0 .. 7
 type FigureID = i64;
 pub type Board = [FigureID; 64];
-type Freedom = [[i64; 64]; 13]; // VOID_ID..KING_ID; Maybe we should call it happyness
+type Freedom = [[i16; 64]; 13]; // VOID_ID..KING_ID; Maybe we should call it happyness
 
 const WR0: usize = 0; // initial positions of King and Rook for castling tests
 const WK3: usize = 3;
@@ -531,7 +563,8 @@ struct HashResult {
     floor: HashLine2, // lower bounds
     kks: KKS,
     pri: i64,
-    king_pos: usize,
+    king_pos: i8,
+    queen_pos: i8,
     pop_cnt: i64,
     control: ChessSquares,
     state: State,
@@ -728,7 +761,7 @@ fn p(_b: Board) {
     }
 }
 
-fn pf(_b: Board) {
+fn pf(_b: [i16; 64]) {
     #[cfg(feature = "salewskiChessDebug")]
     {
         let b = _b;
@@ -923,10 +956,10 @@ fn init_bishop(g: &mut Game) {
         }
         let mut nxt_dir_start = i;
         g.bishop_path[src as usize][i].pos = -1;
-        g.freedom[(ARRAY_BASE_6 + W_BISHOP) as usize][src as usize] = ((i as i32 - 10) * 4) as i64; // range -12..12 // abs val is big enough, so exchange of a
-        g.freedom[(ARRAY_BASE_6 + W_QUEEN) as usize][src as usize] = ((i as i32 - 10) * 4) as i64; // range -12..12 // pawn for very good position may occur
-        g.freedom[(ARRAY_BASE_6 + B_BISHOP) as usize][src as usize] = ((i as i32 - 10) * 4) as i64;
-        g.freedom[(ARRAY_BASE_6 + B_QUEEN) as usize][src as usize] = ((i as i32 - 10) * 4) as i64;
+        g.freedom[(ARRAY_BASE_6 + W_BISHOP) as usize][src as usize] = (i as i16 - 10) * 4; // range -12..12 // abs val is big enough, so exchange of a
+        g.freedom[(ARRAY_BASE_6 + W_QUEEN) as usize][src as usize] = (i as i16 - 10) * 4; // range -12..12 // pawn for very good position may occur
+        g.freedom[(ARRAY_BASE_6 + B_BISHOP) as usize][src as usize] = (i as i16 - 10) * 4;
+        g.freedom[(ARRAY_BASE_6 + B_QUEEN) as usize][src as usize] = (i as i16 - 10) * 4;
         while i > 0 {
             i -= 1;
             let h = g.bishop_path[src as usize][i].nxt_dir_idx == -1;
@@ -949,8 +982,8 @@ fn init_knight(g: &mut Game) {
             }
         }
         g.knight_path[src as usize][i].pos = -1;
-        g.freedom[(ARRAY_BASE_6 + W_KNIGHT) as usize][src as usize] = ((i as i32 - 5) * 4) as i64; // range -12..12
-        g.freedom[(ARRAY_BASE_6 + B_KNIGHT) as usize][src as usize] = ((i as i32 - 5) * 4) as i64;
+        g.freedom[(ARRAY_BASE_6 + W_KNIGHT) as usize][src as usize] = (i as i16 - 5) * 4; // range -12..12
+        g.freedom[(ARRAY_BASE_6 + B_KNIGHT) as usize][src as usize] = (i as i16 - 5) * 4;
     }
 }
 
@@ -976,7 +1009,7 @@ fn init_king(g: &mut Game) {
 fn init_pawn(g: &mut Game, color: Color) {
     // const PS: [i64; 8] = [14, 9, 5, 2, 0, 0, 2, 0];
     // echo "2 1 1 1 2 4"
-    const PS: [i64; 8] = [8, 4, 2, 0, 0, 0, 1, 0]; // +1 for pawn at start row, and promote pressure gain
+    const PS: [i16; 8] = [8, 4, 2, 0, 0, 0, 1, 0]; // +1 for pawn at start row, and promote pressure gain
     for src in POS_RANGE {
         let mut i = 0;
         for d in PAWN_DIRS_WHITE {
@@ -1007,7 +1040,7 @@ fn init_pawn(g: &mut Game, color: Color) {
 }
 
 // delete seq entries with score s == IGNORE_MARKER_LOW_INT16
-fn fast_del_invalid(a: &mut Vec<KK>) {
+fn _my_fast_del_invalid(a: &mut Vec<KK>) {
     let mut i = 0; //a.low
     while i < a.len() && a[i].s != IGNORE_MARKER_LOW_INT16 {
         i += 1;
@@ -1023,6 +1056,11 @@ fn fast_del_invalid(a: &mut Vec<KK>) {
     a.truncate(a.len() - (j - i));
 }
 
+// GPT-4
+fn fast_del_invalid(a: &mut Vec<KK>) {
+    a.retain(|x| x.s != IGNORE_MARKER_LOW_INT16);
+}
+
 // https://rosettacode.org/wiki/Sorting_algorithms/Insertion_sort#Rust
 // fn insertion_sort<T: std::cmp::Ord>(arr: &mut [T]) {
 // must be a stable sort!
@@ -1031,19 +1069,24 @@ fn ixsort(arr: &mut Vec<KK>, highl: usize) {
         let mut j = i;
         while j > 0 && arr[j].s > arr[j - 1].s {
             arr.swap(j, j - 1);
-            j = j - 1;
+            j -= 1;
         }
     }
     fast_del_invalid(arr); // we can delete them, or just skip them
 }
 
 // test for descending
-fn is_sorted(a: &Vec<KK>, len: usize) -> bool {
+fn _my_is_sorted(a: &Vec<KK>, len: usize) -> bool {
     let mut i = len;
     while i > 1 && a[i - 2].s >= a[i - 1].s {
         i -= 1;
     }
     i <= 1
+}
+
+// GPT-4
+fn is_sorted(a: &[KK], len: usize) -> bool {
+    (1..len).all(|i| a[i - 1].s >= a[i].s)
 }
 
 fn capture(kk: KK) -> bool {
@@ -1215,13 +1258,13 @@ pub struct Move {
 }
 
 // result is for White
-fn plain_evaluate_board(g: &Game) -> i64 {
-    let mut result: i64 = 0;
+fn plain_evaluate_board(g: &Game) -> i16 {
+    let mut result: i16 = 0;
     for (p, f) in g.board.iter().enumerate() {
         // if f != VOID_ID -- does not increase performance
-        result += (FIGURE_VALUE[f.abs() as usize] + g.freedom[(6 + *f) as usize][p as usize] as i32)
-            as i64
-            * (signum(*f));
+        result += (FIGURE_VALUE[f.abs() as usize] as i16 + g.freedom[(6 + *f) as usize][p as usize])
+            as i16
+            * (signum(*f)) as i16;
     }
     if g.has_moved.contains(WK3) {
         result -= 4;
@@ -1263,70 +1306,157 @@ i64 alphaBeta( i64 alpha, i64 beta, i64 depthleft ) {
 """
 */
 
-fn in_check(g: &Game, si: usize, col: Color) -> bool {
-    let mut kk: KK = KK {
-        s: 0,
-        sf: 0,
-        df: 0,
-        si: 0,
-        di: 0,
-        eval_depth: 0,
-        promote_to: 0,
+fn _old_in_check(g: &Game, si: i8, col: Color) -> bool {
+    let kk = KK {
+        si: si as i8,
+        //sf: signum(col as i64) as i8,
+        sf: col as i8, // used by walk_pawn
+        s: -1,
+        ..Default::default()
     };
-    let mut s: Vec<KK> = Vec::with_capacity(8);
-    kk.si = si as i8;
-    kk.sf = signum(col as i64) as i8;
+    let mut s: Vec<KK> = Vec::with_capacity(16);
     debug_assert!(kk.sf == col as i8);
-    kk.s = -1; // only captures
-    s.clear();
     walk_bishop(g, kk, &mut s);
     if s.iter()
-        .into_iter()
-        .find(|&it| it.df.abs() == BISHOP_ID as i8 || it.df.abs() == QUEEN_ID as i8)
-        .is_some()
+        .any(|&it| it.df.abs() == BISHOP_ID as i8 || it.df.abs() == QUEEN_ID as i8)
     {
         return true;
     }
     s.clear();
     walk_rook(g, kk, &mut s);
     if s.iter()
-        .into_iter()
-        .find(|&it| it.df.abs() == ROOK_ID as i8 || it.df.abs() == QUEEN_ID as i8)
-        .is_some()
+        .any(|&it| it.df.abs() == ROOK_ID as i8 || it.df.abs() == QUEEN_ID as i8)
     {
         return true;
     }
     s.clear();
     walk_knight(g, kk, &mut s);
+    if s.iter().any(|&it| it.df.abs() == KNIGHT_ID as i8) {
+        return true;
+    }
+    s.clear();
+    walk_pawn(g, kk, &mut s, false);
+    if s.iter().any(|&it| it.df.abs() == PAWN_ID as i8) {
+        return true;
+    }
+    s.clear();
+    walk_king(g, kk, &mut s); // for which case do we really need this?
+    s.iter().any(|&it| it.df.abs() == KING_ID as i8)
+}
+
+fn in_check(g: &Game, si: i8, col: Color, check_king_attack: bool) -> bool {
+    let kk = KK {
+        si: si as i8,
+        //sf: signum(col as i64) as i8,
+        sf: col as i8, // used by walk_pawn
+        s: -1,
+        ..Default::default()
+    };
+    let mut s: Vec<KK> = Vec::with_capacity(16);
+    debug_assert!(kk.sf == col as i8);
+    walk_knight(g, kk, &mut s);
+    if s.iter().any(|&it| it.df.abs() == KNIGHT_ID as i8) {
+        return true;
+    }
+    s.clear();
+    walk_bishop(g, kk, &mut s);
     if s.iter()
-        .into_iter()
-        .find(|&it| it.df.abs() == KNIGHT_ID as i8)
-        .is_some()
+        .any(|&it| it.df.abs() == BISHOP_ID as i8 || it.df.abs() == QUEEN_ID as i8)
+    {
+        return true;
+    }
+    s.clear();
+    walk_rook(g, kk, &mut s);
+    if s.iter()
+        .any(|&it| it.df.abs() == ROOK_ID as i8 || it.df.abs() == QUEEN_ID as i8)
     {
         return true;
     }
     s.clear();
     walk_pawn(g, kk, &mut s, false);
-    if s.iter()
-        .into_iter()
-        .find(|&it| it.df.abs() == PAWN_ID as i8)
-        .is_some()
+    if s.iter().any(|&it| it.df.abs() == PAWN_ID as i8) {
+        return true;
+    }
+    if check_king_attack {
+        s.clear();
+        walk_king(g, kk, &mut s);
+        if s.iter().any(|&it| it.df.abs() == KING_ID as i8) {
+            return true;
+        }
+    }
+    false
+}
+
+fn queen_in_check(g: &Game, si: i8, col: Color) -> bool {
+    // check if queen at si can be captured by pawn, knight, bishop, or rook.
+    // this is dangerous, so depth increase makes sense.
+    let kk = KK {
+        si: si as i8,
+        //sf: signum(col as i64) as i8,
+        sf: col as i8, // used by walk_pawn
+        s: -1,
+        ..Default::default()
+    };
+    let mut s: Vec<KK> = Vec::with_capacity(16);
+    debug_assert!(kk.sf == col as i8);
+    walk_knight(g, kk, &mut s);
+    if s.iter().any(|&it| it.df.abs() == KNIGHT_ID as i8) {
+        return true;
+    }
+    s.clear();
+    walk_bishop(g, kk, &mut s);
+    if s.iter().any(|&it| it.df.abs() == BISHOP_ID as i8)
     {
         return true;
     }
     s.clear();
-    walk_king(g, kk, &mut s);
-    s.iter()
-        .into_iter()
-        .find(|&it| it.df.abs() == KING_ID as i8)
-        .is_some()
+    walk_rook(g, kk, &mut s);
+    if s.iter().any(|&it| it.df.abs() == ROOK_ID as i8)
+    {
+        return true;
+    }
+    s.clear();
+    walk_pawn(g, kk, &mut s, false);
+    if s.iter().any(|&it| it.df.abs() == PAWN_ID as i8) {
+        return true;
+    }
+    false
 }
 
-fn king_pos(g: &Game, c: Color) -> usize {
+/*
+GPT-4 suggestion
+fn in_check(game: &Game, square_index: usize, color: Color) -> bool {
+    let kk = KK {
+        si: square_index as i8,
+        sf: signum(color as i64) as i8,
+        s: -1,
+        ..Default::default()
+    };
+    debug_assert!(kk.sf == color as i8);
+    let mut threats = Vec::with_capacity(8);
+    let checks = [
+        (BISHOP_ID, Some(QUEEN_ID), walk_bishop),
+        (ROOK_ID, Some(QUEEN_ID), walk_rook),
+        (KNIGHT_ID, None, walk_knight),
+        (PAWN_ID, None, walk_pawn),
+        (KING_ID, None, walk_king),
+    ];
+    for &(id, additional_id, walker) in &checks {
+        threats.clear();
+        walker(game, kk, &mut threats);
+        if threats.iter().any(|&it| it.df.abs() == id || additional_id.map_or(false, |aid| it.df.abs() == aid)) {
+            return true;
+        }
+    }
+    false
+}
+*/
+
+fn king_pos(g: &Game, c: Color) -> i8 {
     let k = KING_ID * c as i64;
     for (i, f) in g.board.iter().enumerate() {
         if *f == k {
-            return i as usize;
+            return i as i8;
         }
     }
     debug_assert!(false);
@@ -1336,13 +1466,13 @@ fn king_pos(g: &Game, c: Color) -> usize {
 const V_RATIO: i64 = 8;
 
 const RANGE_EXTEND: bool = false; // depth extend based on distance of movement -- bad idea
-const SELECT_EXTEND: bool = true; // depth extend based on source and destination pieces
+const SELECT_EXTEND: bool = false; // depth extend based on source and destination pieces
 const CASTLING_EXTEND: bool = true;
 const CAPTURE_EXTEND: bool = false; // depth extend for captures -- already covered by ddi array
 const EQUAL_CAPTURE_EXTEND: bool = true; // depth extend for captures of pieces with similar value -- might be a good idea
 const LARGE_CAPTURE_EXTEND: bool = false; // i.e. pawn captures knight -- extend makes no sense
 const PAWN_MARCH_EXTEND: bool = true; // successive pawn moves of a single pawn, to gain conversion to queen
-const CHECK_EXTEND: bool = true; // depth extend when we are in check (only supported for first 3 plys)
+const CHECK_EXTEND: bool = true; // depth extend when we are in check (or queen is attacked)
 const PROMOTE_EXTEND: bool = true; // pawn promotion
 const NO_EXTEND_AT_ALL: bool = false; // avoid depth extends for now
 
@@ -1418,16 +1548,18 @@ fn abeta(
     let mut hash_res: HashResult;
     let mut sdi: [i64; 7] = [0; 7]; // source figure depth increase
     let mut ddi: [i64; 7] = [0; 7]; // destination figure depth increase
-    let mut nep_pos: i8;
-    let mut attacs: i64 = 0;
+    let mut nep_pos: i8; // new en passant position for next ply
+    let mut attacs: i64 = 0; // attacked positions
     let mut v_depth_inc: i64; // conditional depth extension, e.g. for chess or captures
     let mut eval_cnt: i64 = 0; // number of newly evaluated moves
     let mut alpha: i64 = alpha_0; // mutable alpha
     let mut valid_move_found: bool = false; // can we move -- no checkmate or stalemate
     let back: Board; // backup for debugging, so we can test if all our moves undo operations are correct
     back = g.board; // test board integrity
-    let mut result: Move = Default::default();
-    result.state = STATE_NO_VALID_MOVE;
+    let mut result = Move {
+        state: STATE_NO_VALID_MOVE,
+        ..Default::default()
+    };
     let v_depth = v_depth - V_RATIO;
     let encoded_board = encode_board(&g, color);
     let hash_pos = get_tte(g, encoded_board);
@@ -1436,15 +1568,15 @@ fn abeta(
                                                         // debug_assert!(hash_res.kks.len() > 0); // can be zero for checkmate or stalemate
                                                         // we have the list of moves, and maybe the exact score, or a possible beta cutoff
         debug_inc(&mut g.hash_succ);
-        for i in (depth_0..(MAX_DEPTH + 1) as usize).rev() {
+        for i in (depth_0..(MAX_DEPTH + 1)).rev() {
             if hash_res.score[i].s != INVALID_SCORE {
                 // we have the exact score, so return it
                 if i == depth_0
-                    || hash_res.score[i].s.abs() < KING_VALUE_DIV_2 as i16
-                    || hash_res.score[i].s.abs() >= KING_VALUE as i16
+                    || hash_res.score[i].s.abs() < KING_VALUE_DIV_2
+                    || hash_res.score[i].s.abs() >= KING_VALUE
                 {
                     // use of deeper knowledge in endgame can give wrong moves to mate reports
-                    // or generate repeated moves.
+                    // or generate repeated move sequences.
                     result.score = pmq(hash_res.score[i].s as i64, -cup);
                     result.src = hash_res.score[i].si as i64; // these details are currently only needed for cup == 0
                     result.dst = hash_res.score[i].di as i64;
@@ -1471,6 +1603,7 @@ fn abeta(
         // we have to create the move list
         hash_res = HashResult::default();
         init_hr(&mut hash_res);
+        hash_res.queen_pos = -1;
     }
 
     //when false: // possible, but makes not much sense
@@ -1493,11 +1626,11 @@ fn abeta(
     }
     */
 
-    let mut evaluation: i64 = LOWEST_SCORE as i64;
+    let mut evaluation: i16 = LOWEST_SCORE;
     if depth_0 == 0 {
         // null move estimation for quiescence search
-        evaluation = plain_evaluate_board(&g) * color - old_list_len;
-        if evaluation >= beta {
+        evaluation = plain_evaluate_board(&g) * color as i16 - old_list_len as i16;
+        if evaluation as i64 >= beta {
             result.score = beta;
             debug_inc(&mut g.null_move_succ_1);
             return result;
@@ -1525,11 +1658,12 @@ fn abeta(
                 ROOK_ID => walk_rook(&g, kk, &mut s),
                 QUEEN_ID => {
                     walk_bishop(&g, kk, &mut s);
-                    walk_rook(&g, kk, &mut s)
+                    walk_rook(&g, kk, &mut s);
+                    hash_res.queen_pos = kk.si
                 }
                 KING_ID => {
                     walk_king(&g, kk, &mut s);
-                    hash_res.king_pos = kk.si as usize
+                    hash_res.king_pos = kk.si
                 }
                 _ => {}
             }
@@ -1541,6 +1675,36 @@ fn abeta(
                 hash_res.control.insert(el.di); // attacked positions
             }
         }
+
+        debug_assert!(COLOR_WHITE == 1 && COLOR_BLACK == -1);
+        debug_assert!(COLOR_WHITE == color || COLOR_BLACK == color);
+        let sign = color;
+        let offset = (color == COLOR_BLACK) as usize * 56;
+        if color == COLOR_WHITE && g.board[3] == W_KING
+            || color == COLOR_BLACK && g.board[59] == B_KING
+        {
+            kk.df = VOID_ID as i8;
+            kk.sf = (W_KING * sign) as i8;
+            if g.board[offset + 0] == W_ROOK * sign
+                && g.board[offset + 1] == VOID_ID
+                && g.board[offset + 2] == VOID_ID
+            {
+                kk.di = offset as i8 + 1;
+                kk.si = offset as i8 + 3;
+                s.push(kk);
+            }
+            if g.board[offset + 7] == W_ROOK * sign
+                && g.board[offset + 4] == VOID_ID
+                && g.board[offset + 5] == VOID_ID
+                && g.board[offset + 6] == VOID_ID
+            {
+                kk.di = offset as i8 + 5;
+                kk.si = offset as i8 + 3;
+                s.push(kk);
+            }
+        }
+
+        /*
         kk.df = VOID_ID as i8; // for all 4 types of castling
         if color == COLOR_WHITE && g.board[3] == W_KING {
             if g.board[0] == W_ROOK && g.board[1] == VOID_ID && g.board[2] == VOID_ID {
@@ -1578,6 +1742,7 @@ fn abeta(
                 s.push(kk);
             }
         }
+        */
         for el in &mut s {
             debug_assert!(g.board[el.si as usize] != VOID_ID);
             // guessed ratings of the moves
@@ -1589,11 +1754,11 @@ fn abeta(
                     debug_assert!(el.promote_to == 0);
                 }
             }
-            el.s = (FIGURE_VALUE[el.promote_to.abs() as usize] + FIGURE_VALUE[el.df.abs() as usize]
-                - FIGURE_VALUE[el.sf.abs() as usize] / 2 * (el.df != 0) as i32
-                + g.freedom[(6 + el.sf) as usize][(0 + el.di) as usize] as i32
-                - g.freedom[(6 + el.sf) as usize][(0 + el.si) as usize] as i32)
-                as i16;
+            el.s = FIGURE_VALUE[el.promote_to.abs() as usize] + FIGURE_VALUE[el.df.abs() as usize]
+                - FIGURE_VALUE[el.sf.abs() as usize] / 2 * (el.df != 0) as i16
+                + g.freedom[(6 + el.sf) as usize][(0 + el.di) as usize]
+                - g.freedom[(6 + el.sf) as usize][(0 + el.si) as usize];
+            //as i16;
         }
         let h = s.len();
         ixsort(&mut s, h);
@@ -1604,12 +1769,15 @@ fn abeta(
     }
 
     if CHECK_EXTEND && !hash_res.tested_for_check && depth_0 > 1 {
-        hash_res.in_check = in_check(&g, hash_res.king_pos, color);
+        hash_res.in_check = (hash_res.queen_pos >= 0
+            && queen_in_check(&g, hash_res.queen_pos, color))
+            || in_check(&g, hash_res.king_pos, color, false);
         // this field is optional information
         hash_res.tested_for_check = true;
     }
 
-    let hash_res_kks_len = hash_res.kks.len() as i64 + attacs + hash_res.control.0.popcnt() as i64;
+    let hash_res_kks_len =
+        (hash_res.kks.len() as i64 + attacs + hash_res.control.0.popcnt() as i64) as i16;
     if depth_0 == 0 {
         // more detailed null move estimation for quiescence search. NOTE: Take attacs into account?
         evaluation += hash_res_kks_len; // we may do a more fine grained board control evaluation?
@@ -1619,16 +1787,16 @@ fn abeta(
                 (hash_res.kks.len() as i64 - old_list_len).abs(),
             );
         }
-        if evaluation >= beta {
+        if evaluation as i64 >= beta {
             result.score = beta;
             debug_inc(&mut g.null_move_succ_2);
             return result;
         }
-        lift(&mut alpha, evaluation);
+        lift(&mut alpha, evaluation as i64);
     }
     result.control = hash_res.control.clone();
     let mut hash_res_kks_high: usize = 0; // the number of newly evaluated positions, we sort only this range.
-    result.score = evaluation; // LOWEST_SCORE for depth_0 > 0
+    result.score = evaluation as i64; // LOWEST_SCORE for depth_0 > 0
     debug_assert!(depth_0 == 0 || result.score == LOWEST_SCORE as i64);
     debug_assert!(hash_res.score[depth_0].s == INVALID_SCORE);
     // debug_assert!(hash_res.kks.len() > 0); occurs in endgame?
@@ -1661,7 +1829,7 @@ fn abeta(
             // this move was already evaluated, but was not good enough, no beta cutoff
             valid_move_found = true; // list contains only valid moves, as we delete or skip the invalid ones
             debug_inc(&mut g.re_eval_skip);
-            m.score = pmq(el.s as i64, -cup) as i64;
+            m.score = pmq(el.s as i64, -cup);
             debug_assert!(m.score < beta);
         } else {
             // do new evaluation
@@ -1692,13 +1860,14 @@ fn abeta(
                 // EXTEND tests are not very cheap, so do then only in higher levels
                 // the following code is ordered so that v_depth_inc never is decreased, avoiding max() or lift() calls.
 
-                if SELECT_EXTEND {
+                if false && SELECT_EXTEND {
                     // makes no sense in endgame
                     sdi = [0, 0, 0, 0, 0, 1, 1]; // source figure depth increase -- increase depth when king or queen is moved
                     ddi = [0, 0, 1, 1, 1, 2, 0]; // destination figure depth increase -- increase depth for fat captures
                 }
 
-                if is_queen_or_king(el.sf) && g.move_chain[cup as usize] == el.si {
+                if false && is_queen_or_king(el.sf) && g.move_chain[cup as usize] == el.si {
+                    // we use in_check() test for king and queen instead!
                     v_depth_inc = 1; // not 2, because sdi gives already +1
                 }
 
@@ -1717,11 +1886,11 @@ fn abeta(
                                     v_depth_inc = 4;
                                 }
                             }
-                            if EQUAL_CAPTURE_EXTEND {
-                                if immediate_gain.abs() < 10 {
+                            if EQUAL_CAPTURE_EXTEND && depth_0 > 1 {
+                                if immediate_gain.abs() < 25 {
                                     if true || g.move_chain[cup as usize] != el.di {
                                         // only when not a re-capture
-                                        v_depth_inc = 2;
+                                        v_depth_inc = 4;
                                     }
                                 }
                             }
@@ -1744,9 +1913,9 @@ fn abeta(
                         }
                     }
                 }
-                if CHECK_EXTEND {
+                if CHECK_EXTEND && cup > 1 && depth_0 > 1 {
                     if hash_res.in_check {
-                        v_depth_inc = 2;
+                        v_depth_inc = 4 + (cup == 2) as i64 * 4;
                     }
                 }
                 if PROMOTE_EXTEND && el.promote_to.abs() != VOID_ID as i8 {
@@ -1767,7 +1936,7 @@ fn abeta(
                 result.state = STATE_CAN_CAPTURE_KING; // the other result fields are not really used/needed
                 result.score = KING_VALUE as i64; // + 1 // or high(int16)
                 hash_res.state = STATE_CAN_CAPTURE_KING;
-                hash_res.score[MAX_DEPTH as usize].s = result.score as i16; // MAX_DEPTH, as it is the final score
+                hash_res.score[MAX_DEPTH].s = result.score as i16; // MAX_DEPTH, as it is the final score
                 debug_assert!(hash_pos < 0); // once stored, we just retrieve it
                 put_tte(g, encoded_board, hash_res, depth_0 as i64, hash_pos); // store this for a fast return next time
                 return result;
@@ -1833,7 +2002,7 @@ fn abeta(
                 cup + 1,
                 -beta,
                 -alpha,
-                hash_res_kks_len,
+                hash_res_kks_len as i64,
                 nep_pos,
             );
             m.score *= -1;
@@ -1919,7 +2088,7 @@ fn abeta(
         }
     }
     if depth_0 > 0 && !valid_move_found {
-        if in_check(&g, hash_res.king_pos, color) {
+        if in_check(&g, hash_res.king_pos, color, false) {
             result.state = STATE_CHECKMATE;
             result.score = -KING_VALUE as i64 + cup as i64 - 1;
         } else {
@@ -2058,10 +2227,10 @@ pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
         }
     }
     //when defined(salewskiChessDebug):
-    if false {
+    if true {
         if !silent {
             g.debug_list.push(move_to_str(&g, p0, p1, result));
-            println!("--");
+            //println!("--");
         }
     }
     p(g.board);
@@ -2108,9 +2277,9 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
                 && !g.has_moved.contains(q[0])
                 && !g.has_moved.contains(q[4])
             {
-                if !(in_check(&g, q[0], color)
-                    || in_check(&g, q[1], color)
-                    || in_check(&g, q[2], color))
+                if !(in_check(&g, q[0] as i8, color, true)
+                    || in_check(&g, q[1] as i8, color, true)
+                    || in_check(&g, q[2] as i8, color, true))
                 {
                     kk.di = (q[0] + q[5] - 2) as i8;
                     s.push(kk);
@@ -2121,7 +2290,7 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
     let backup = g.board;
     for el in &mut s {
         do_move(g, si as i8, el.di, true);
-        if in_check(&g, king_pos(&g, color), color) {
+        if in_check(&g, king_pos(&g, color), color, true) {
             el.s = 0
         }
         g.board = backup;
@@ -2132,11 +2301,7 @@ pub fn tag(g: &mut Game, si: i64) -> KKS {
 
 pub fn move_is_valid2(g: &mut Game, si: i64, di: i64) -> bool {
     signum(g.board[si as usize]) as Color == COLOR_WHITE
-        && tag(g, si)
-            .iter()
-            .into_iter()
-            .find(|&it| it.di == di as i8)
-            .is_some()
+        && tag(g, si).iter().any(|&it| it.di == di as i8)
 }
 
 const FIG_STR: [&str; 7] = ["  ", "  ", "N_", "B_", "R_", "Q_", "K_"];
@@ -2179,6 +2344,7 @@ pub fn move_to_str(g: &Game, si: Position, di: Position, flag: i32) -> String {
             &g,
             king_pos(&g, (-signum(g.board[di as usize])) as Color),
             (-signum(g.board[di as usize])) as Color,
+            true,
         ) {
             result.push_str(" +");
         }
@@ -2273,16 +2439,16 @@ fn setup_endgame(g: &mut Game) -> bool {
                 if odd(col(b[(s + 1) as usize] as i8) as i8) != odd(row(b[(s + 1) as usize] as i8))
                 {
                     g.freedom[opp_king as usize][i as usize] =
-                        -sqr(row(i) as i64 - col(i) as i64) as i64; // sqr may be better than abs when both sites are
+                        -sqr(row(i) as i64 - col(i) as i64) as i16; // sqr may be better than abs when both sites are
                 } else {
                     // struggling, i.e. K + B + B vs K + B
                     g.freedom[opp_king as usize][i as usize] =
-                        -sqr(row(i) as i64 + col(i) as i64 - 7) as i64;
+                        -sqr(row(i) as i64 + col(i) as i64 - 7) as i16;
                 }
             } else {
                 // chase to border and/or arbitrary corner
                 g.freedom[opp_king as usize][i as usize] =
-                    -sqr((2 * row(i) - 7).abs() as i64 + (2 * col(i) - 7).abs() as i64 / 2);
+                    -sqr((2 * row(i) - 7).abs() as i64 + (2 * col(i) - 7).abs() as i64 / 2) as i16;
             }
         }
         //if s == -1: echo "White King" else: echo "Black King"
@@ -2295,15 +2461,7 @@ fn setup_endgame(g: &mut Game) -> bool {
 }
 
 pub fn reply(g: &mut Game) -> Move {
-    let mut result: Move = Move {
-        src: 0,
-        dst: 0,
-        score: 0,
-        control: BitSet::new(),
-        promote_to: 0,
-        state: 0,
-    };
-
+    let mut result: Move = Default::default();
     //println!("{:?}", g.freedom);
     if cfg!(feature = "salewskiChessDebug") {
         for i in 0..13 {
@@ -2347,10 +2505,11 @@ pub fn reply(g: &mut Game) -> Move {
         println!("{}", _m_2_str(g, result.src as i8, result.dst as i8));
         */
         println!(
-            "Depth: {} {} score {}",
+            "Depth: {} {} score {} ({:.2} s)",
             depth,
             _m_2_str(g, result.src as i8, result.dst as i8),
-            result.score
+            result.score,
+            start_time.elapsed().as_millis() as f64 * 1e-3
         );
 
         if result.score.abs() > SURE_CHECKMATE as i64 {
@@ -2358,10 +2517,12 @@ pub fn reply(g: &mut Game) -> Move {
         }
         if start_time.elapsed() > time {
             //debugEcho "Time: ", cpuTime() - start_time
+            /*
             println!(
                 "timebreak: {}",
                 start_time.elapsed().as_millis() as f64 * 1e-3
             );
+            */
             break;
         }
     }
@@ -2469,4 +2630,4 @@ when false:
   set_board(B_QUEEN, "E3")
 
 */
-// 2470 lines 389 as
+// 2633 lines 432 as
