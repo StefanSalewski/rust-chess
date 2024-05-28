@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 18-MAI-2024
+// v 0.2 -- 28-MAI-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -1987,7 +1987,8 @@ fn abeta(
             } else {
                 new_state = Default::default(); // only to satisfy the compiler
             }
-            debug_assert!(v_depth_inc + sdi[el.sf.abs() as usize] + ddi[el.df.abs() as usize] < 8);
+            debug_assert!(v_depth_inc + sdi[el.sf.abs() as usize] + ddi[el.df.abs() as usize] <= 10);
+            debug_assert!(v_depth_inc <= 8);
             let to_100_bak = g.to_100;
             if is_a_pawnelsf || el.df != VOID_ID as i8 {
                 // test for castlings as well?
@@ -2220,7 +2221,8 @@ pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
     g.board[p0 as usize] = VOID_ID;
     if !silent {
         if is_a_pawn_at(&g, p1) || result != FLAG_PLAIN {
-            g.history = HashMap::new();
+            //g.history = HashMap::new();
+            g.history.clear();
         } else {
             let new_state = encode_board(&g, signum(g.board[p1 as usize]) as Color);
             *g.history.entry(new_state).or_insert(0) += 1;
