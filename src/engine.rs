@@ -1,5 +1,5 @@
 // The Salewski Chess Engine -- ported from Nim to Rust as a tiny excercise while learning the Rust language
-// v 0.2 -- 28-MAI-2024
+// v 0.2 -- 03-JUN-2024
 // (C) 2015 - 2032 Dr. Stefan Salewski
 // All rights reserved.
 //
@@ -2215,7 +2215,9 @@ pub fn do_move(g: &mut Game, p0: Position, p1: Position, silent: bool) -> i32 {
         }
     } else if is_a_pawn_at(&g, p0) && is_void_at(&g, p1) && odd(p1 - p0) {
         result = FLAG_EP;
-        g.board[p1 as usize - g.board[p0 as usize] as usize * 8] = VOID_ID;
+        // g.board[p1 as usize - g.board[p0 as usize] as usize * 8] = VOID_ID;
+        // g.board[p1 as usize - g.board[p0 as usize] as usize * 8] = VOID_ID;
+        g.board[(p1 as i64 - g.board[p0 as usize] * 8) as usize] = VOID_ID;
     }
     g.board[p1 as usize] = g.board[p0 as usize];
     g.board[p0 as usize] = VOID_ID;

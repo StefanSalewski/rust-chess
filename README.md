@@ -12,7 +12,7 @@ Perhaps we will make a Xilem GUI later.
 To allow replaying a game, we have recently added a way to print the move list: Double
 click on an empty chess square, and the movelist is printed in the terminal.
 
-A version with a simple egui GUI and a few configuration options should be soon available.
+You might prefer the new version with the egui user interface: https://github.com/StefanSalewski/egui-chess
 
 ```
 git clone https://github.com/stefansalewski/rust-chess.git
